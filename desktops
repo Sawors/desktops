@@ -6,7 +6,7 @@ exec() {
 	echo "$@"
 
 	echo "detecting config..."
-	$runner --detect
+	$runner detect
 	
 	current=$(head -1 /etc/desktops/current)
 	current_path=$(tail -1 /etc/desktops/current)
@@ -41,7 +41,7 @@ exec() {
 		done
 
 		echo "applying user config for user $user"
-		sudo --user=\#$user $runner --apply
+		sudo --user=\#$user $runner apply
 	fi
 }
 

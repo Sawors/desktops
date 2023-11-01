@@ -1,6 +1,7 @@
 #!/bin/env python3
 from os import system
 from os import path
+import os
 from sys import argv
 from time import time
 #from plyer import notification
@@ -9,14 +10,15 @@ import glob
 import yaml
 
 root = "/etc/desktops"
-computers = "computers"
+computers = "hardware"
+hardwareLocations = [f"/usr/share/desktops/{computers}", f"{root}/{computers}"]
 currentTarget = f"{root}/current"
 configFormat = "components.yml"
 displayIdentifier = "Display"
 memoryIdentifier = "memory"
 cpuIdentifier = "cpu"
 launchScriptIdentifier = "launch-script"
-userConfigLocation = ".config/desktops/computers"
+userConfigLocation = f".config/desktops/{computers}"
 EXACT_MATCH=False
 
 
@@ -115,9 +117,10 @@ def loadConfigs() -> set:
         for configName in glob.glob(root_dir=configRoot, pathname=f"*/{configFormat}", recursive=True):
             userConfigs.add(f"{configRoot}/{configName}")
 
-    for config in glob.glob(root_dir=f"{root}/{computers}", recursive=True, pathname=f"*/{configFormat}"):
-        print(config)
-        userConfigs.add(f"{root}/{computers}/{config}")
+    for rootpath in hardwareLocations :
+        for config in glob.glob(root_dir=rootpath, recursive=True, pathname=f"*/{configFormat}"):
+                print(config)
+                userConfigs.add(f"{rootpath}/{config}")
     
     return userConfigs
 
@@ -131,9 +134,24 @@ def trimConfigName(configPath:str) -> str:
 
     return trimmed
 
+try:
+    hardwareLocations.append(f"{path.dirname(argv[0])}/{computers}")
+except:
+    print("Current directory not usable for hardware detection")
 
-for argument in argv:
-    if(argument == "--detect"):
+if len(argv) < 2:
+    print("""
+    Please specify an action.
+    Possible actions are :
+        detect
+        apply
+        create
+    """)
+    exit()
+
+argument = argv[1]
+match argument:
+    case "detect":
         startTime = time()
         dataMap = loadComponents()
         print(f"fetching took {round((time()-startTime)*1000)}ms")
@@ -141,6 +159,7 @@ for argument in argv:
         print(f"hardware: {dataMap}")
 
         foundConfigs = loadConfigs()
+        print(hardwareLocations)
         print(foundConfigs)
         matchMap = {}
 
@@ -171,10 +190,53 @@ for argument in argv:
             with open(currentTarget,"w") as current:
                 current.write("unknown")
         print(f"config detection done in {round((time()-startTime)*1000)}ms")
+        
+    case "apply":
+        # the config will be applied as the current user. For any operation requiring root privileges please edit /etc/sddm/Xsetup.
+        passedArgument = ""
+        for index, otherArg in enumerate(argv):
+            if (otherArg == "--type" or otherArg == "-t") and len(argv) > index+1:
+                passedArgument = argv[index+1]
+                break
+            
+        config = None
+        scripts = [None]*2
+        
+        # general config launch script
+        with open(currentTarget, "r") as current:
+            lines = current.readlines()
+            config = lines[0].strip()
+            configPath = lines[1].strip()
+            generalFile = f"{configPath}/user-launch.sh"
+            if path.isfile(generalFile):
+                scripts[0] = generalFile
+            elif path.isfile():
+                print(f"ERROR: config path not found, did the config detection execute well? (path: {configPath})")
+        
+        if config == None or len(config) == 0:
+                print("No config found!")
+                exit(1)
 
-    if(argument.startswith("--create")):
+        # user-specific launch script
+        userConfig = path.expanduser(f"~/.config/desktops/{computers}/{config}/user-launch.sh")
+        if path.isfile(userConfig): scripts[1] = userConfig
+
+        for s in scripts:
+            if not s == None: system(f"{s} {passedArgument}")
+
+        try:
+            system(f"notify-send \"Desktops\" \"Config [{config}] applied !\"")
+        except:
+            print("notification could not be sent! THIS IS NOT AN ERROR BUT A BAD IMPLEMENTATION")
+    
+    case "create":
         print("not patched yet! Aborting creation")
-        break
+        exit()
+
+exit()
+
+for argument in argv:
+    if(argument.startswith("create")):
         name = argument[len("--create")+1:len(argument)]
         dataMap = loadComponents()
         dataMap[launchScriptIdentifier] = f"{root}/{computers}/{name}/user-launch.sh"
@@ -222,41 +284,3 @@ for argument in argv:
                 """)
         except PermissionError as e:
             print("could not create the template root script : permission denied")        
-
-    if(argument.startswith("--apply")):
-        # the config will be applied as the current user. For any operation requiring root privileges please edit /etc/sddm/Xsetup.
-        passedArgument = argument[len("--apply")+1:len(argument)]
-        config = None
-        scripts = [None]*2
-
-        # general config launch script
-        with open(currentTarget, "r") as current:
-            lines = current.readlines()
-            config = lines[0].strip()
-            configPath = lines[1].strip()
-            generalFile = f"{configPath}/user-launch.sh"
-            if path.isfile(generalFile):
-                scripts[0] = generalFile
-            elif path.isfile():
-                print(f"ERROR: config path not found, did the config detection execute well? (path: {configPath})")
-        
-        if config == None or len(config) == 0:
-                print("No config found!")
-                exit(1)
-
-        # user-specific launch script
-        userConfig = path.expanduser(f"~/.config/desktops/{computers}/{config}/user-launch.sh")
-        if path.isfile(userConfig): scripts[1] = userConfig
-
-        for s in scripts:
-            if not s == None: system(f"{s} {passedArgument}")
-
-        try:
-            system(f"notify-send \"Desktops\" \"Config [{config}] applied !\"")
-        except:
-            print("notification could not be sent! THIS IS NOT AN ERROR BUT A BAD IMPLEMENTATION")
-
-        #notification.notify(
-        #   title = "Desktops",
-        #    message = f"Config [{config}] applied"
-        #)

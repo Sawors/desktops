@@ -3,7 +3,7 @@ Description=Detects the current used desktop
 After=display-manager.service
 
 [Service]
-ExecStart=/etc/desktops/detect-desktop.sh
+ExecStart=/etc/desktops/desktops
 #Type=oneshot
 
 [Install]
