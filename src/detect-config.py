@@ -12,7 +12,7 @@ import yaml
 root = "/etc/desktops"
 computers = "hardware"
 hardwareLocations = [f"/usr/share/desktops/{computers}", f"{root}/{computers}"]
-currentTarget = f"{root}/current"
+currentUsedConfig = f"{root}/current"
 configFormat = "components.yml"
 displayIdentifier = "Display"
 memoryIdentifier = "memory"
@@ -59,7 +59,7 @@ def loadComponents() -> dict:
     except subprocess.CalledProcessError :
         print("an error occured when fetching the data !")
         print("no config found")
-        with open(currentTarget,"w") as current:
+        with open(currentUsedConfig,"w") as current:
             current.write("unknown")
 
     fetched = output.strip().splitlines()
@@ -119,7 +119,6 @@ def loadConfigs() -> set:
 
     for rootpath in hardwareLocations :
         for config in glob.glob(root_dir=rootpath, recursive=True, pathname=f"*/{configFormat}"):
-                print(config)
                 userConfigs.add(f"{rootpath}/{config}")
     
     return userConfigs
@@ -134,6 +133,122 @@ def trimConfigName(configPath:str) -> str:
 
     return trimmed
 
+def detect():
+    startTime = time()
+    dataMap = loadComponents()
+    fetchTime = round((time()-startTime)*1000)
+    print(f"fetching took {fetchTime}ms")
+    dataSize = len(dataMap)
+    print(f"hardware: {dataMap}")
+
+    foundConfigs = loadConfigs()
+    print(f"found {len(foundConfigs)} hardware configs")
+    matchMap = {}
+
+    for configPath in foundConfigs:
+        matchMap[configPath] = matchConfig(config=configPath, dataMap=dataMap, exactMatch=EXACT_MATCH)
+    
+    config = None
+    configPath = ""
+
+    sortedMatches = sorted(matchMap.items(), key=lambda k:k[1], reverse=True)
+
+    if not (len(sortedMatches) == 0 or (EXACT_MATCH and sortedMatches[0][1] != dataSize)):
+        bestMatch = sortedMatches[0]
+        configPath = path.dirname(bestMatch[0])
+        config = trimConfigName(configPath)
+        if bestMatch[1] == dataSize:
+            print(f"config [{config}] exactly matched !")
+        elif not EXACT_MATCH:
+            print(f"using config [{config}] with {bestMatch[1]}/{dataSize} matches")
+
+
+    if config != None:
+        with open(currentUsedConfig,"w") as current:
+            current.write(f"{config}\n{configPath}\n")
+
+    else:
+        print("no config found")
+        with open(currentUsedConfig,"w") as current:
+            current.write("unknown")
+    totalTime = round((time()-startTime)*1000)
+    print(f"config matching done in {totalTime-fetchTime}ms")
+    print(f"complete config detection done in {totalTime}ms")
+
+def apply(args: list):
+    # the config will be applied as the current user. For any operation requiring root privileges please edit /etc/sddm/Xsetup.
+    passedArgument = ""
+    for index, otherArg in enumerate(args):
+        if (otherArg == "--type" or otherArg == "-t") and len(args) > index+1:
+            passedArgument = args[index+1]
+            break
+        
+    config = None
+    scripts = [None]*2
+
+    isRoot = "--root" in args or "-r" in args
+
+    def checkSure():
+        sure = input("Are you sure this is what you want to do ? (y/N): ").lower() in ["y","yes"]
+        if not sure:
+            print("User cancelation, aborting sequence.")
+            exit()
+
+    if isRoot and os.geteuid() != 0:
+        print("Applying root config as a non-root user, this is not an intended usage.")
+        checkSure()
+    elif (not isRoot) and os.geteuid() == 0:
+        print("Root user detected, automatically switching to root mode (--root)")
+        isRoot = True
+
+    if isRoot:
+        print("Applying root startup scripts...")
+    else:
+        print(f"Applying user startup scripts for user [{os.getlogin()}]...")
+
+    # general config launch script
+    with open(currentUsedConfig, "r") as current:
+        lines = current.readlines()
+        config = lines[0].strip()
+        configPath = lines[1].strip()
+        generalFile = f"{configPath}/{'root-launch' if isRoot else 'user-launch'}.sh"
+        if path.isfile(generalFile):
+            scripts[0] = generalFile
+        elif path.isfile():
+            print(f"ERROR: config path not found, did the config detection execute well? (path: {configPath})")
+    
+    if config == None or len(config) == 0:
+            print("No config found!")
+            exit(1)
+
+    # user-specific launch script
+    if not isRoot:
+        userConfig = path.expanduser(f"~/.config/desktops/{computers}/{config}/user-launch.sh")
+        if path.isfile(userConfig): scripts[1] = userConfig
+
+    successfulScripts = 0
+
+    for s in scripts:
+        try:
+            if not s == None and not len(s) == 0: 
+                #system(f"{s} {passedArgument}")
+                successfulScripts += 1
+        except:
+            print(f"Permissions to run {s} denied !")
+            if isRoot:
+                print("Please run this program with root privileges when using --root or -r !")
+
+    if not isRoot:
+        try:
+            system(f"notify-send \"Desktops\" \"Config [{config}] {'applied' if successfulScripts > 0 else 'FAILED TO BE APPLIED'} !\"")
+        except:
+            print("notification could not be sent! THIS IS NOT AN ERROR BUT A BAD IMPLEMENTATION")
+    
+
+#
+#   End of definitions, beginning of script flow
+#
+
 try:
     hardwareLocations.append(f"{path.dirname(argv[0])}/{computers}")
 except:
@@ -142,93 +257,22 @@ except:
 if len(argv) < 2:
     print("""
     Please specify an action.
+
     Possible actions are :
         detect
         apply
-        create
-    """)
+        create""")
     exit()
 
 argument = argv[1]
 match argument:
     case "detect":
-        startTime = time()
-        dataMap = loadComponents()
-        print(f"fetching took {round((time()-startTime)*1000)}ms")
-        dataSize = len(dataMap)
-        print(f"hardware: {dataMap}")
-
-        foundConfigs = loadConfigs()
-        print(hardwareLocations)
-        print(foundConfigs)
-        matchMap = {}
-
-        for configPath in foundConfigs:
-            matchMap[configPath] = matchConfig(config=configPath, dataMap=dataMap, exactMatch=EXACT_MATCH)
-        
-        config = None
-        configPath = ""
-
-        sortedMatches = sorted(matchMap.items(), key=lambda k:k[1], reverse=True)
-
-        if not (len(sortedMatches) == 0 or (EXACT_MATCH and sortedMatches[0][1] != dataSize)):
-            bestMatch = sortedMatches[0]
-            configPath = path.dirname(bestMatch[0])
-            config = trimConfigName(configPath)
-            if bestMatch[1] == dataSize:
-                print(f"config [{config}] exactly matched !")
-            elif not EXACT_MATCH:
-                print(f"using config [{config}] with {bestMatch[1]}/{dataSize} matches")
-
-
-        if config != None:
-            with open(currentTarget,"w") as current:
-                current.write(f"{config}\n{configPath}\n")
-
-        else:
-            print("no config found")
-            with open(currentTarget,"w") as current:
-                current.write("unknown")
-        print(f"config detection done in {round((time()-startTime)*1000)}ms")
+        print("Detecting hardware configuration...")
+        detect()
         
     case "apply":
-        # the config will be applied as the current user. For any operation requiring root privileges please edit /etc/sddm/Xsetup.
-        passedArgument = ""
-        for index, otherArg in enumerate(argv):
-            if (otherArg == "--type" or otherArg == "-t") and len(argv) > index+1:
-                passedArgument = argv[index+1]
-                break
-            
-        config = None
-        scripts = [None]*2
-        
-        # general config launch script
-        with open(currentTarget, "r") as current:
-            lines = current.readlines()
-            config = lines[0].strip()
-            configPath = lines[1].strip()
-            generalFile = f"{configPath}/user-launch.sh"
-            if path.isfile(generalFile):
-                scripts[0] = generalFile
-            elif path.isfile():
-                print(f"ERROR: config path not found, did the config detection execute well? (path: {configPath})")
-        
-        if config == None or len(config) == 0:
-                print("No config found!")
-                exit(1)
+        apply(argv)
 
-        # user-specific launch script
-        userConfig = path.expanduser(f"~/.config/desktops/{computers}/{config}/user-launch.sh")
-        if path.isfile(userConfig): scripts[1] = userConfig
-
-        for s in scripts:
-            if not s == None: system(f"{s} {passedArgument}")
-
-        try:
-            system(f"notify-send \"Desktops\" \"Config [{config}] applied !\"")
-        except:
-            print("notification could not be sent! THIS IS NOT AN ERROR BUT A BAD IMPLEMENTATION")
-    
     case "create":
         print("not patched yet! Aborting creation")
         exit()
