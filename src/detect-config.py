@@ -8,16 +8,18 @@ from time import time
 import subprocess
 import glob
 import yaml
+import tempfile
 
 root = "/etc/desktops"
 computers = "hardware"
 hardwareLocations = [f"/usr/share/desktops/{computers}", f"{root}/{computers}"]
-currentUsedConfig = f"{root}/current"
+currentUsedConfig = f"{tempfile.gettempdir()}/desktops_current"
 configFormat = "components.yml"
 displayIdentifier = "Display"
 memoryIdentifier = "memory"
 cpuIdentifier = "cpu"
-launchScriptIdentifier = "launch-script"
+rootScriptIdentifier = "root-launch.sh"
+userScriptIdentifier = "user-launch.sh"
 userConfigLocation = f".config/desktops/{computers}"
 EXACT_MATCH=False
 
@@ -175,6 +177,22 @@ def detect():
     print(f"config matching done in {totalTime-fetchTime}ms")
     print(f"complete config detection done in {totalTime}ms")
 
+def getStartupScripts(configDir: str, identifier: str) -> list:
+    dirPath = configDir if path.isdir(configDir) else path.dirname(configDir)
+    configs = []
+    if not path.isdir(dirPath): return configs
+
+    if dirPath[len(dirPath)-1] == '/': dirPath = dirPath[0:len(dirPath)-2]
+    genConfigFile = f"{dirPath}/{identifier}"
+    if path.isfile(genConfigFile) : configs.append(genConfigFile)
+
+    if identifier == userScriptIdentifier:
+        userConfig = path.expanduser(f"~/.config/desktops/{computers}/{trimConfigName(configDir)}/{userScriptIdentifier}")
+        if path.isfile(userConfig): configs.append(userConfig)
+    
+    return configs
+    
+
 def apply(args: list):
     # the config will be applied as the current user. For any operation requiring root privileges please edit /etc/sddm/Xsetup.
     passedArgument = ""
@@ -207,31 +225,32 @@ def apply(args: list):
         print(f"Applying user startup scripts for user [{os.getlogin()}]...")
 
     # general config launch script
-    with open(currentUsedConfig, "r") as current:
-        lines = current.readlines()
-        config = lines[0].strip()
-        configPath = lines[1].strip()
-        generalFile = f"{configPath}/{'root-launch' if isRoot else 'user-launch'}.sh"
-        if path.isfile(generalFile):
-            scripts[0] = generalFile
-        elif path.isfile():
-            print(f"ERROR: config path not found, did the config detection execute well? (path: {configPath})")
+    configDir = None
+    if not path.isfile(currentUsedConfig):
+        print("Current used config file not found, please do a config detection first!")
+    try:
+        with open(currentUsedConfig, "r") as current:
+            lines = current.readlines()
+            config = lines[0].strip()
+            configPath = lines[1].strip()
+            configDir = configPath if path.isdir(configPath) else path.dirname(configPath)
+    except:
+        print(f"Access to current config in {currentUsedConfig} refused : Unsufficient permission")
+        exit()
     
     if config == None or len(config) == 0:
             print("No config found!")
             exit(1)
 
     # user-specific launch script
-    if not isRoot:
-        userConfig = path.expanduser(f"~/.config/desktops/{computers}/{config}/user-launch.sh")
-        if path.isfile(userConfig): scripts[1] = userConfig
-
+    scripts = getStartupScripts(configDir, rootScriptIdentifier if isRoot else userScriptIdentifier)
     successfulScripts = 0
 
     for s in scripts:
         try:
             if not s == None and not len(s) == 0: 
                 #system(f"{s} {passedArgument}")
+                print(s)
                 successfulScripts += 1
         except:
             print(f"Permissions to run {s} denied !")
@@ -245,6 +264,62 @@ def apply(args: list):
             print("notification could not be sent! THIS IS NOT AN ERROR BUT A BAD IMPLEMENTATION")
     
 
+def benchmark() -> dict:
+    components = loadComponents()
+    configs = loadConfigs()
+    componentList = ["Board","CPU","GPU","Memory","Display"]
+    fetchTimes = {}
+    fetchResult = {}
+    print(f"Split fetch timings :")
+    for identifier in componentList:
+        baseTime = time()
+        try:
+            output = subprocess.check_output(f"fastfetch --pipe -s {identifier} --multithreading", shell=True).decode("UTF-8")
+            fetchTimes[identifier] = round((time()-baseTime)*1000)
+            fetchResult[identifier] = output
+        except subprocess.CalledProcessError :
+            print("an error occured when fetching the data !")
+
+    totalTime = sum(fetchTimes.values())
+    for k,v in sorted(fetchTimes.items(), key=lambda k:k[1], reverse=False):
+        print(f"    - fetched {k} in {v}ms ({round(100*v/totalTime)}%)")
+    print(f"    ==> all fetches took {totalTime}ms in total")
+    print("\nStarting merged fetch benchmark...")
+    startTime = time()
+    cList = loadComponents()
+    print(f"    ==> merged fetch took {round((time()-startTime)*1000)}ms")
+    print(f"\nHardware : ==> {cList}")
+    return cList
+
+def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
+
+    hardware = {}
+    configs = []
+
+    if benchmarkFetch: 
+        print("Starting benchmarking sequence...")
+        hardware = benchmark()
+        
+    if listConfigs: 
+        print("Listing hardware configs...")
+        configs = loadConfigs()
+        for c in configs:
+            print(f"    - {trimConfigName(c)} : {c}")
+        print(f"    ==> {len(configs)} config{'s' if len(configs) > 1 else ''} found")
+            
+    if listScripts: 
+        print("Listing startup scripts...")
+        if len(configs) == 0: configs = loadConfigs()
+
+        for c in configs:
+            print(f"    [{trimConfigName(c)}] :")
+            print( "        root :")
+            for sc in getStartupScripts(c, rootScriptIdentifier):
+                print(f"        - {sc}")
+            print( "        user :")
+            for sc in getStartupScripts(c, userScriptIdentifier):
+                print(f"        - {sc}")
+        
 #
 #   End of definitions, beginning of script flow
 #
@@ -269,6 +344,15 @@ match argument:
     case "detect":
         print("Detecting hardware configuration...")
         detect()
+
+    case "test":
+        if len(argv) == 2 : test()
+        else:
+            test(
+                benchmarkFetch = "--benchmark" in argv or "--hardware" in argv,
+                listConfigs = "--configs" in argv,
+                listScripts = "--scripts" in argv,
+            )
         
     case "apply":
         apply(argv)
@@ -290,7 +374,7 @@ for argument in argv:
             yaml.safe_dump(data=dataMap,stream=targetFile)
         # write empty root script (if possible)
         try :
-            scriptPath = f"{root}/{computers}/{name}/root-launch.sh"
+            scriptPath = f"{root}/{computers}/{name}/{rootScriptIdentifier}"
             if(path.isfile(scriptPath)): break
             with open(scriptPath, "w") as targetRootScript :
                 targetRootScript.write("# instructions put here will be executed as root, be careful !")
