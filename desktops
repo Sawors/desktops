@@ -4,11 +4,13 @@ from os import path
 import os
 from sys import argv
 from time import time
+import stat
 #from plyer import notification
 import subprocess
 import glob
 import yaml
 import tempfile
+import shutil
 # fetching backends interfaces
 
 
@@ -38,7 +40,8 @@ fetchProvider = None
 
 root = "/etc/desktops"
 computers = "hardware"
-hardwareLocations = [f"/usr/share/desktops/{computers}", f"{root}/{computers}"]
+defaultHardwareLocation = f"/usr/share/desktops/{computers}"
+hardwareLocations = [defaultHardwareLocation, f"{root}/{computers}"]
 currentUsedConfig = f"{tempfile.gettempdir()}/desktops_current"
 configFormat = "components.yml"
 displayIdentifier = "Display"
@@ -323,8 +326,10 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
     if listConfigs: 
         print("Listing hardware configs...")
         configs = loadConfigs()
+        if len(hardware) == 0: hardware = loadComponents()
         for c in configs:
             print(f"    - {trimConfigName(c)} : {c}")
+            print(f"      matches: {matchConfig(c,hardware,False)}/{len(hardware)}")
         print(f"    ==> {len(configs)} config{'s' if len(configs) > 1 else ''} found")
             
     if listScripts: 
@@ -344,6 +349,40 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
 #   End of definitions, beginning of script flow
 #
 
+def create(name:str):
+    dataMap = loadComponents()
+    configPath = f"{defaultHardwareLocation}/{name}"
+    if path.exists(configPath):
+        print(f"Config [{name}] already exists!\nAborting creation")
+        exit()
+        
+    try:
+        os.makedirs(configPath)
+    except Exception as e:
+        print(f"Config directory creation failed, aborting operation ({repr(e)})")
+        exit()
+
+    print(f"config will be created at {configPath}/")
+    print(f"this hardware will be used for config:")
+    for k in dataMap:
+        print(f"    - {k}: {dataMap[k]}")
+    # write config
+    try:
+        with open(f"{configPath}/{configFormat}", "w") as targetFile:
+            yaml.safe_dump(data=dataMap,stream=targetFile)
+        with open(f"{configPath}/{rootScriptIdentifier}", "w") as targetFile:
+            targetFile.write("# root startup script goes here")
+            os.chmod(targetFile.name, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH | stat.S_IRGRP)
+        with open(f"{configPath}/{userScriptIdentifier}", "w") as targetFile:
+            targetFile.write("# user startup script goes here")
+            os.chmod(targetFile.name, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH | stat.S_IRGRP)
+    except Exception as e:
+        print(f"Config file creation failed, aborting operation ({repr(e)})")
+        try:
+            shutil.rmtree(configPath)
+        except:
+            print("Config cleanup failed")
+
 try:
     hardwareLocations.append(f"{path.dirname(argv[0])}/{computers}")
 except:
@@ -362,7 +401,6 @@ if len(argv) < 2:
 
 argument = argv[1]
 
-print(f"start - {argument} {time()*1000}")
 match argument:
     case "detect":
         print("Detecting hardware configuration...")
@@ -382,58 +420,17 @@ match argument:
         apply(argv)
 
     case "create":
-        print("not patched yet! Aborting creation")
-        exit()
-
-print(f"stop  - {argument} {time()*1000}")
+        name = ""
+        for a in argv:
+            if a.startswith("--name=") or a.startswith("-n="):
+                name = a[a.index("=")+1:len(a)]
+                break
+        if len(name) < 1 and len(argv) >= 3 and len(argv[2]) > 0 and not argv[2].startswith("-"):
+            name = argv[2]
+        if len(name) > 0:
+            print(f"Creating config [{name}]...")
+            create(name)
+            print("Config creation done!")
+        else:
+            print("Please input a name for the config, either using --name=<name> or by putting it as the argument after \"create\"")
 exit()
-
-for argument in argv:
-    if(argument.startswith("create")):
-        name = argument[len("--create")+1:len(argument)]
-        dataMap = loadComponents()
-        dataMap[launchScriptIdentifier] = f"{root}/{computers}/{name}/user-launch.sh"
-        
-        # write config yaml
-        with open(f"{root}/{computers}/{name}/config.yml", "w") as targetFile:
-            yaml.safe_dump(data=dataMap,stream=targetFile)
-        # write empty root script (if possible)
-        try :
-            scriptPath = f"{root}/{computers}/{name}/{rootScriptIdentifier}"
-            if(path.isfile(scriptPath)): break
-            with open(scriptPath, "w") as targetRootScript :
-                targetRootScript.write("# instructions put here will be executed as root, be careful !")
-        except PermissionError as e:
-            print("could not create the template root script : permission denied")        
-        try :
-            scriptPath = f"{root}/{computers}/{name}/user-launch.sh"
-            if(path.isfile(scriptPath)): break
-            with open(scriptPath, "w") as targetScript :
-                targetRootScript.write(""" # instructions put here are executed as the current logged user
-                
-                do_delayed_operation() {
-                    # since this script is part of the booting process, it must by design not
-                    # slow down the system. Instruction put here are executed ASYNCHRONOUSLY from the
-                    # main thread in a SINGLE NEW THREAD (by default). It means that you cann still
-                    # put operations in a sequential execution order even if we are out of the main thread
-
-                    # > delayed operations here <
-                    # these operations usually are queries taking some delay to finish,
-                    # like for instance getting a list of available networks and doing operations
-                    # on this list.
-
-                }
-
-                # executing the async block 
-                do_delayed_operations &
-
-                if [[ $1 == "boot" ]];
-                then
-                    # put here instructions which should be executed only at boot
-                    # (at boot the string "boot" should be passed to this script)
-                    #
-                    # usually this is useful to start commonly used softwares
-                fi
-                """)
-        except PermissionError as e:
-            print("could not create the template root script : permission denied")        
