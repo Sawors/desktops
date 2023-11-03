@@ -49,6 +49,7 @@ userScriptIdentifier = "user-launch.sh"
 userConfigLocation = f".config/desktops/{computers}"
 EXACT_MATCH = "--exact-match" in argv or "-m" in argv
 
+
 # takes raw data, and attempts to make it standardized.
 # Data should be split with one component per key (and monitor amount pre-computed)
 # this methods DOES NO ALTER THE BASE COLLECTION, but it does clone it, thus increasing memory footprint
@@ -240,9 +241,9 @@ def apply(args: list):
         isRoot = True
 
     if isRoot:
-        print("Applying root startup scripts...")
+        print("applying root startup scripts")
     else:
-        print(f"Applying user startup scripts for user [{os.getlogin()}]...")
+        print(f"applying user startup scripts for user [{os.getlogin()}]")
 
     # general config launch script
     configDir = None
@@ -270,7 +271,6 @@ def apply(args: list):
         try:
             if not s == None and not len(s) == 0: 
                 system(f"{s} {passedArgument}")
-                print(s)
                 successfulScripts += 1
         except:
             print(f"Permissions to run {s} denied !")
@@ -282,7 +282,7 @@ def apply(args: list):
             system(f"notify-send \"Desktops\" \"Config [{config}] {'applied' if successfulScripts > 0 else 'FAILED TO BE APPLIED'} !\"")
         except:
             print("notification could not be sent! THIS IS NOT AN ERROR BUT A BAD IMPLEMENTATION")
-    
+    print(f"Launch script execution done ({successfulScripts}/{len(scripts)})")
 
 def benchmark() -> dict:
     components = loadComponents()
@@ -361,6 +361,8 @@ if len(argv) < 2:
     exit()
 
 argument = argv[1]
+
+print(f"start - {argument} {time()*1000}")
 match argument:
     case "detect":
         print("Detecting hardware configuration...")
@@ -376,12 +378,14 @@ match argument:
             )
         
     case "apply":
+        print("Launching startup script...")
         apply(argv)
 
     case "create":
         print("not patched yet! Aborting creation")
         exit()
 
+print(f"stop  - {argument} {time()*1000}")
 exit()
 
 for argument in argv:

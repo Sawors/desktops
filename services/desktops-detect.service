@@ -3,7 +3,7 @@ Description=Detects the current used desktop
 After=display-manager.service
 
 [Service]
-ExecStart=/etc/desktops/desktops
+ExecStart=/bin/env bash -c "/etc/desktops/desktops detect && /etc/desktops/desktops apply --root"
 #Type=oneshot
 
 [Install]
