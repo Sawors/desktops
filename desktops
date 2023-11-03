@@ -1,5 +1,4 @@
 #!/bin/env python3
-from abc import ABC, abstractmethod
 from os import system
 from os import path
 import os
@@ -21,8 +20,8 @@ import tempfile
 #   - [ ] split code into dedicated classes and interfaces
 #
 
-from sys import path as syspath
-syspath.append(f"{path.dirname(argv[0])}/src/fetch")
+#from sys import path as syspath
+#syspath.append(f"{path.dirname(argv[0])}/src/fetch")
 
 fetchProviderName = "fastfetch"
 for arg in argv:
@@ -33,7 +32,9 @@ for arg in argv:
             break
             
 fetchProvider = None
-from fetch import fastfetch
+####
+####
+####
 
 root = "/etc/desktops"
 computers = "hardware"
@@ -355,7 +356,8 @@ if len(argv) < 2:
     Possible actions are :
         detect
         apply
-        create""")
+        create
+        test""")
     exit()
 
 argument = argv[1]
