@@ -1,10 +1,10 @@
 [Unit]
 Description=Starts the user startup scripts of the detected hardware config
-Requires=graphical-session.target
+Wants=graphical-session.target
 
 [Service]
-ExecStart=/bin/env bash -c "/etc/desktops/desktops apply --type=boot"
-Type=forking
+Type=oneshot
+ExecStart=/etc/desktops/desktops apply --type=boot
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
