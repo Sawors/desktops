@@ -157,9 +157,6 @@ def loadConfigs() -> set:
 
 
 def detect():
-
-    writeConfig(unknownConfig)
-    exit()
     
     startTime = time()
     dataMap = loadComponents()
