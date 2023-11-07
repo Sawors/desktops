@@ -36,7 +36,10 @@ cpuIdentifier = "cpu"
 rootScriptIdentifier = "root-launch.sh"
 userScriptIdentifier = "user-launch.sh"
 userConfigLocation = f".config/desktops/{computers}"
+
 EXACT_MATCH = "--exact-match" in argv or "-m" in argv
+WRITE_CONFIG = not ("--no-write" in argv or "-w" in argv)
+VERBOSE = "--verbose" in argv or "-v" in argv
 
 
 # takes raw data, and attempts to make it standardized.
@@ -68,11 +71,14 @@ def trimConfigName(configPath:str) -> str:
 
     return trimmed
 
+def printVerbose(text: str):
+    if VERBOSE: print(text)
 
 def writeConfig(config_dir: str):
-    print(config_dir)
+    if not WRITE_CONFIG: 
+        printVerbose("read only mode, config will not be written to disk")
+        exit()
     baseDir = config_dir if (path.isdir(config_dir) or not path.exists(config_dir)) else path.dirname(config_dir)
-    print(baseDir)
     if not path.isdir(baseDir): os.makedirs(baseDir)
 
     configName = trimConfigName(baseDir)
@@ -82,7 +88,7 @@ def writeConfig(config_dir: str):
             current.write(f"{configName}\n{baseDir}\n")
             os.chmod(current.name, stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH | stat.S_IRGRP | stat.S_IWGRP)
     except PermissionError as p:
-        print(f"Could not write the config to disk, permission denied! ({currentUsedConfig})")
+        print(f"[!] Could not write config to disk, permission denied!")
 
 # TODO : move this to the fastfetch implementation
 def loadComponents() -> dict:
@@ -161,12 +167,12 @@ def detect():
     startTime = time()
     dataMap = loadComponents()
     fetchTime = round((time()-startTime)*1000)
-    print(f"fetching took {fetchTime}ms")
+    printVerbose(f"fetching took {fetchTime}ms")
     dataSize = len(dataMap)
-    print(f"hardware: {dataMap}")
+    printVerbose(f"hardware: {dataMap}")
 
     foundConfigs = loadConfigs()
-    print(f"found {len(foundConfigs)} hardware configs")
+    printVerbose(f"found {len(foundConfigs)} hardware configs")
     matchMap = {}
 
     for configPath in foundConfigs:
@@ -181,6 +187,8 @@ def detect():
         bestMatch = sortedMatches[0]
         configPath = path.dirname(bestMatch[0])
         config = trimConfigName(configPath)
+        if EXACT_MATCH:
+            printVerbose("exact match mode specified")
         if bestMatch[1] == dataSize:
             print(f"config [{config}] exactly matched !")
         elif not EXACT_MATCH:
@@ -194,8 +202,8 @@ def detect():
         writeConfig(unknownConfig)
             
     totalTime = round((time()-startTime)*1000)
-    print(f"config matching done in {totalTime-fetchTime}ms")
-    print(f"complete config detection done in {totalTime}ms")
+    printVerbose(f"config matching done in {totalTime-fetchTime}ms")
+    printVerbose(f"complete config detection done in {totalTime}ms")
 
 def getStartupScripts(configDir: str, identifier: str) -> list:
     dirPath = configDir if path.isdir(configDir) else path.dirname(configDir)
