@@ -22,13 +22,13 @@ import shutil
 #   - [ ] split code into dedicated classes and interfaces
 #
 
+# general
 root = "/etc/desktops"
 computers = "hardware"
 defaultHardwareLocation = f"/usr/share/desktops/{computers}"
 hardwareLocations = [defaultHardwareLocation, f"{root}/{computers}"]
 currentUsedConfig = f"{tempfile.gettempdir()}/desktops_current"
 configFormat = "components.yml"
-# TODO : add a general way to handle unknown config
 unknownConfig = f"{defaultHardwareLocation}/unknown_config"
 displayIdentifier = "Display"
 memoryIdentifier = "memory"
@@ -36,10 +36,17 @@ cpuIdentifier = "cpu"
 rootScriptIdentifier = "root-launch.sh"
 userScriptIdentifier = "user-launch.sh"
 userConfigLocation = f".config/desktops/{computers}"
+# ideally sorted in order, from quickest to slowest
+fetchComponents = ["Board","CPU","Memory","GPU","Display"]
 
+# arguments
 EXACT_MATCH = "--exact-match" in argv or "-m" in argv
+PARTIAL_FETCH = "--partial" in argv or "-p" in argv
 WRITE_CONFIG = not ("--no-write" in argv or "-w" in argv)
 VERBOSE = "--verbose" in argv or "-v" in argv
+
+# partial fetch
+partialFetchComponents = ["Board","CPU","Memory"]
 
 
 # takes raw data, and attempts to make it standardized.
@@ -77,7 +84,7 @@ def printVerbose(text: str):
 def writeConfig(config_dir: str):
     if not WRITE_CONFIG: 
         printVerbose("read only mode, config will not be written to disk")
-        exit()
+        return
     baseDir = config_dir if (path.isdir(config_dir) or not path.exists(config_dir)) else path.dirname(config_dir)
     if not path.isdir(baseDir): os.makedirs(baseDir)
 
@@ -90,11 +97,16 @@ def writeConfig(config_dir: str):
     except PermissionError as p:
         print(f"[!] Could not write config to disk, permission denied!")
 
-# TODO : move this to the fastfetch implementation
-def loadComponents() -> dict:
+
+def loadComponents(components: list) -> dict:
     output = ""
+    componentStr = ""
+    for c in components:
+        componentStr += f"{c}:"
+    componentStr = componentStr[0:len(componentStr)-1]
+    
     try:
-        output = subprocess.check_output("fastfetch --pipe -s Board:CPU:GPU:Memory:Display --multithreading", shell=True).decode("UTF-8")
+        output = subprocess.check_output(f"fastfetch --pipe -s {componentStr} --multithreading", shell=True).decode("UTF-8")
     except subprocess.CalledProcessError :
         print("an error occured when fetching the data !")
         print("no config found")
@@ -117,8 +129,8 @@ def loadComponents() -> dict:
             data = duo[1].strip()
                 
             dataMap[str(duo[0]).lower()] = data
-    
-    dataMap["monitors"] = monitorAmount
+    if displayIdentifier in components:
+        dataMap["monitors"] = monitorAmount
 
     return standardizeData(dataMap)
 
@@ -165,7 +177,7 @@ def loadConfigs() -> set:
 def detect():
     
     startTime = time()
-    dataMap = loadComponents()
+    dataMap = loadComponents(fetchComponents)
     fetchTime = round((time()-startTime)*1000)
     printVerbose(f"fetching took {fetchTime}ms")
     dataSize = len(dataMap)
@@ -204,6 +216,56 @@ def detect():
     totalTime = round((time()-startTime)*1000)
     printVerbose(f"config matching done in {totalTime-fetchTime}ms")
     printVerbose(f"complete config detection done in {totalTime}ms")
+
+def partialDetect():
+    if EXACT_MATCH: 
+        detect()
+        return
+
+    foundConfigs = loadConfigs()
+    printVerbose(f"found {len(foundConfigs)} hardware configs")
+    
+    startTime = time()
+    dataMap = loadComponents(partialFetchComponents)
+    fetchTime = round((time()-startTime)*1000)
+
+    unusedComponents = [""]
+
+    for c in fetchComponents:
+        if not c in partialFetchComponents: unusedComponents.append(c)
+
+    for i in unusedComponents:
+        if len(i) > 0: dataMap.update(loadComponents({i}))
+        
+        matchMap = {}  
+        for configPath in foundConfigs:
+            matchMap[configPath] = matchConfig(config=configPath, dataMap=dataMap, exactMatch=EXACT_MATCH)
+        print(matchMap)
+        maxMatches = max(matchMap.values())
+
+        matching = []
+        for k,v in matchMap.items():
+            if v == maxMatches : matching.append(k)
+
+        if len(matching) <= 1:
+            if len(matching) == 0:
+                print("No config found! Using unknown_config instead.")
+                writeConfig(unknownConfig)
+            else:
+                # partial match case
+                config = matching[0]
+                print(f"using config [{trimConfigName(config)}] with {matchMap[config]} matches")
+                print("test0")
+                writeConfig(config)
+                print("test1")
+            print("test2")
+            break
+    print("test3")
+    
+    totalTime = round((time()-startTime)*1000)
+    printVerbose(f"config matching done in {totalTime-fetchTime}ms")
+    printVerbose(f"complete config detection done in {totalTime}ms")
+    
 
 def getStartupScripts(configDir: str, identifier: str) -> list:
     dirPath = configDir if path.isdir(configDir) else path.dirname(configDir)
@@ -292,13 +354,13 @@ def apply(args: list):
     print(f"Launch script execution done ({successfulScripts}/{len(scripts)})")
 
 def benchmark() -> dict:
-    components = loadComponents()
+    compSet = fetchComponents
+    components = loadComponents(compSet)
     configs = loadConfigs()
-    componentList = ["Board","CPU","GPU","Memory","Display"]
     fetchTimes = {}
     fetchResult = {}
     print(f"Split fetch timings :")
-    for identifier in componentList:
+    for identifier in compSet:
         baseTime = time()
         try:
             output = subprocess.check_output(f"fastfetch --pipe -s {identifier} --multithreading", shell=True).decode("UTF-8")
@@ -313,13 +375,16 @@ def benchmark() -> dict:
     print(f"    ==> all fetches took {totalTime}ms in total")
     print("\nStarting merged fetch benchmark...")
     startTime = time()
-    cList = loadComponents()
+    mergedList = loadComponents(compSet)
     print(f"    ==> merged fetch took {round((time()-startTime)*1000)}ms")
-    print(f"\nHardware : ==> {cList}")
-    return cList
+    print(f"\nHardware : ==> {mergedList}")
+    return mergedList
 
 def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
 
+    partialDetect()
+    exit()
+    
     hardware = {}
     configs = []
 
@@ -330,7 +395,7 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
     if listConfigs: 
         print("\nListing hardware configs...")
         configs = {}
-        if len(hardware) == 0: hardware = loadComponents()
+        if len(hardware) == 0: hardware = loadComponents(fetchComponents)
 
         for c in loadConfigs():
             configs[c] = matchConfig(c,hardware)
@@ -355,7 +420,7 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
 
 
 def create(name:str):
-    dataMap = loadComponents()
+    dataMap = loadComponents(fetchComponents)
     configPath = f"{defaultHardwareLocation}/{name}"
     if path.exists(configPath):
         print(f"Config [{name}] already exists!\nAborting creation")
@@ -424,7 +489,11 @@ match argument:
             exit()
         
         print("Detecting hardware configuration...")
-        detect()
+        if PARTIAL_FETCH:
+            printVerbose("using partial detection")
+            partialDetect()
+        else:
+            detect()
 
     case "test":
         if len(argv) == 2 : test()
