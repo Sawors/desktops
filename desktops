@@ -320,16 +320,20 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
         hardware = benchmark()
         
     if listConfigs: 
-        print("Listing hardware configs...")
-        configs = loadConfigs()
+        print("\nListing hardware configs...")
+        configs = {}
         if len(hardware) == 0: hardware = loadComponents()
-        for c in configs:
-            print(f"    - {trimConfigName(c)} : {c}")
-            print(f"      matches: {matchConfig(c,hardware,False)}/{len(hardware)}")
+
+        for c in loadConfigs():
+            configs[c] = matchConfig(c,hardware)
+        
+        for c in sorted(configs.items(), key=lambda k:k[1], reverse=True):
+            print(f"    - {trimConfigName(c[0])} : {c[0]}")
+            print(f"      matches: {c[1]}/{len(hardware)}")
         print(f"    ==> {len(configs)} config{'s' if len(configs) > 1 else ''} found")
             
     if listScripts: 
-        print("Listing startup scripts...")
+        print("\nListing startup scripts...")
         if len(configs) == 0: configs = loadConfigs()
 
         for c in configs:
@@ -340,10 +344,7 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
             print( "        user :")
             for sc in getStartupScripts(c, userScriptIdentifier):
                 print(f"        - {sc}")
-        
-#
-#   End of definitions, beginning of script flow
-#
+
 
 def create(name:str):
     dataMap = loadComponents()
@@ -378,6 +379,14 @@ def create(name:str):
             shutil.rmtree(configPath)
         except:
             print("Config cleanup failed")
+
+
+
+##################################################
+#                                                #
+#  End of definitions, beginning of script flow  #
+#                                                #
+##################################################
 
 try:
     hardwareLocations.append(f"{path.dirname(argv[0])}/{computers}")

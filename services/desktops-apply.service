@@ -3,7 +3,7 @@ Description=Starts the user startup scripts of the detected hardware config
 Wants=graphical-session.target
 
 [Service]
-Type=oneshot
+Type=forking
 ExecStart=/etc/desktops/desktops apply --type=boot
 
 [Install]
