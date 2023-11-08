@@ -42,7 +42,7 @@ fetchComponents = ["Board","CPU","Memory","GPU","Display"]
 # arguments
 EXACT_MATCH = "--exact-match" in argv or "-m" in argv
 PARTIAL_FETCH = "--partial" in argv or "-p" in argv
-WRITE_CONFIG = not ("--no-write" in argv or "-w" in argv)
+WRITE_CONFIG = not ("--no-write" in argv or "-r" in argv)
 VERBOSE = "--verbose" in argv or "-v" in argv
 
 # partial fetch
@@ -227,20 +227,22 @@ def partialDetect():
     
     startTime = time()
     dataMap = loadComponents(partialFetchComponents)
-    fetchTime = round((time()-startTime)*1000)
+    printVerbose(f"initial fetch done in {round((time()-startTime)*1000)}ms")
 
     unusedComponents = [""]
 
     for c in fetchComponents:
         if not c in partialFetchComponents: unusedComponents.append(c)
 
+    refetchAmount = 0
     for i in unusedComponents:
-        if len(i) > 0: dataMap.update(loadComponents({i}))
+        if len(i) > 0: 
+            dataMap.update(loadComponents({i}))
+            refetchAmount += 1
         
         matchMap = {}  
         for configPath in foundConfigs:
             matchMap[configPath] = matchConfig(config=configPath, dataMap=dataMap, exactMatch=EXACT_MATCH)
-        print(matchMap)
         maxMatches = max(matchMap.values())
 
         matching = []
@@ -255,15 +257,11 @@ def partialDetect():
                 # partial match case
                 config = matching[0]
                 print(f"using config [{trimConfigName(config)}] with {matchMap[config]} matches")
-                print("test0")
                 writeConfig(config)
-                print("test1")
-            print("test2")
             break
-    print("test3")
     
     totalTime = round((time()-startTime)*1000)
-    printVerbose(f"config matching done in {totalTime-fetchTime}ms")
+    printVerbose(f"config matching done with {refetchAmount} additionnal fetch{'es' if refetchAmount > 1 else ''}")
     printVerbose(f"complete config detection done in {totalTime}ms")
     
 
