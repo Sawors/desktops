@@ -5,21 +5,16 @@ import os
 from sys import argv
 from time import time
 import stat
-#from plyer import notification
 import subprocess
 import glob
 import yaml
 import tempfile
 import shutil
-# fetching backends interfaces
-
 
 # TODO 
 #   - [ ] add program config support
-#   - [ ] change language (to a compiled/packaged one, java/rust/dart)
-#   - [ ] create README
-#   - [ ] add to git
-#   - [ ] split code into dedicated classes and interfaces
+#   - [~] create README
+#   - [X] add to git
 #
 
 # general
@@ -38,6 +33,8 @@ userScriptIdentifier = "user-launch.sh"
 userConfigLocation = f".config/desktops/{computers}"
 # ideally sorted in order, from quickest to slowest
 fetchComponents = ["Board","CPU","Memory","GPU","Display"]
+# partial fetch
+partialFetchComponents = ["Board","CPU","Memory"]
 
 # arguments
 EXACT_MATCH = "--exact-match" in argv or "-m" in argv
@@ -45,8 +42,11 @@ PARTIAL_FETCH = "--partial" in argv or "-p" in argv
 WRITE_CONFIG = not ("--no-write" in argv or "-r" in argv)
 VERBOSE = "--verbose" in argv or "-v" in argv
 
-# partial fetch
-partialFetchComponents = ["Board","CPU","Memory"]
+# colors
+c_orange = "\033[93m"
+c_green = "\033[92m"
+c_blue = "\033[94m"
+c_default = "\033[39m"
 
 
 # takes raw data, and attempts to make it standardized.
@@ -174,14 +174,15 @@ def loadConfigs() -> set:
     return userConfigs
 
 
-def detect():
+def detect() -> str:
     
     startTime = time()
     dataMap = loadComponents(fetchComponents)
-    fetchTime = round((time()-startTime)*1000)
-    printVerbose(f"fetching took {fetchTime}ms")
+    if VERBOSE:
+        fetchTime = round((time()-startTime)*1000)
+        printVerbose(f"fetching took {fetchTime}ms")
     dataSize = len(dataMap)
-    printVerbose(f"hardware: {dataMap}")
+    #printVerbose(f"hardware: {dataMap}")
 
     foundConfigs = loadConfigs()
     printVerbose(f"found {len(foundConfigs)} hardware configs")
@@ -190,8 +191,7 @@ def detect():
     for configPath in foundConfigs:
         matchMap[configPath] = matchConfig(config=configPath, dataMap=dataMap, exactMatch=EXACT_MATCH)
     
-    config = None
-    configPath = ""
+    configPath = unknownConfig
 
     sortedMatches = sorted(matchMap.items(), key=lambda k:k[1], reverse=True)
 
@@ -202,32 +202,28 @@ def detect():
         if EXACT_MATCH:
             printVerbose("exact match mode specified")
         if bestMatch[1] == dataSize:
-            print(f"config [{config}] exactly matched !")
+            printVerbose(f"config [{config}] exactly matched !")
         elif not EXACT_MATCH:
-            print(f"using config [{config}] with {bestMatch[1]}/{dataSize} matches")
-
-
-    if config != None:
-        writeConfig(configPath)
-    else:
-        print("No config found! Using unknown_config instead.")
-        writeConfig(unknownConfig)
+            printVerbose(f"found config [{config}] with {bestMatch[1]}/{dataSize} matches")
             
-    totalTime = round((time()-startTime)*1000)
-    printVerbose(f"config matching done in {totalTime-fetchTime}ms")
-    printVerbose(f"complete config detection done in {totalTime}ms")
+    if VERBOSE:
+        totalTime = round((time()-startTime)*1000)
+        printVerbose(f"config matching done in {totalTime-fetchTime}ms")
+        printVerbose(f"complete config detection done in {totalTime}ms")
 
-def partialDetect():
+    return configPath
+
+def partialDetect() -> str:
     if EXACT_MATCH: 
         detect()
         return
 
     foundConfigs = loadConfigs()
     printVerbose(f"found {len(foundConfigs)} hardware configs")
-    
-    startTime = time()
+
+    if VERBOSE: startTime = time()
     dataMap = loadComponents(partialFetchComponents)
-    printVerbose(f"initial fetch done in {round((time()-startTime)*1000)}ms")
+    if VERBOSE: printVerbose(f"initial fetch done in {round((time()-startTime)*1000)}ms")
 
     unusedComponents = [""]
 
@@ -235,6 +231,8 @@ def partialDetect():
         if not c in partialFetchComponents: unusedComponents.append(c)
 
     refetchAmount = 0
+    config = unknownConfig
+    
     for i in unusedComponents:
         if len(i) > 0: 
             dataMap.update(loadComponents({i}))
@@ -251,19 +249,19 @@ def partialDetect():
 
         if len(matching) <= 1:
             if len(matching) == 0:
-                print("No config found! Using unknown_config instead.")
-                writeConfig(unknownConfig)
+                printVerbose("No config found! Using unknown_config instead.")
             else:
                 # partial match case
                 config = matching[0]
-                print(f"using config [{trimConfigName(config)}] with {matchMap[config]} matches")
-                writeConfig(config)
+                printVerbose(f"found config [{trimConfigName(config)}] with {matchMap[config]} matches")
             break
-    
-    totalTime = round((time()-startTime)*1000)
-    printVerbose(f"config matching done with {refetchAmount} additionnal fetch{'es' if refetchAmount > 1 else ''}")
-    printVerbose(f"complete config detection done in {totalTime}ms")
-    
+
+    if VERBOSE:
+        totalTime = round((time()-startTime)*1000)
+        printVerbose(f"config matching done with {refetchAmount} additionnal fetch{'es' if refetchAmount > 1 else ''}")
+        printVerbose(f"complete config detection done in {totalTime}ms")
+
+    return config
 
 def getStartupScripts(configDir: str, identifier: str) -> list:
     dirPath = configDir if path.isdir(configDir) else path.dirname(configDir)
@@ -351,7 +349,7 @@ def apply(args: list):
             print("notification could not be sent! THIS IS NOT AN ERROR BUT A BAD IMPLEMENTATION")
     print(f"Launch script execution done ({successfulScripts}/{len(scripts)})")
 
-def benchmark() -> dict:
+def benchmark():
     compSet = fetchComponents
     components = loadComponents(compSet)
     configs = loadConfigs()
@@ -370,30 +368,27 @@ def benchmark() -> dict:
     totalTime = sum(fetchTimes.values())
     for k,v in sorted(fetchTimes.items(), key=lambda k:k[1], reverse=False):
         print(f"    - fetched {k} in {v}ms ({round(100*v/totalTime)}%)")
-    print(f"    ==> all fetches took {totalTime}ms in total")
-    print("\nStarting merged fetch benchmark...")
+    print(f"{c_green}==> all fetches took {c_orange}{totalTime}ms{c_green} in total{c_default}")
+    print(f"{c_blue}\nStarting merged fetch benchmark...{c_default}")
     startTime = time()
-    mergedList = loadComponents(compSet)
-    print(f"    ==> merged fetch took {round((time()-startTime)*1000)}ms")
-    print(f"\nHardware : ==> {mergedList}")
-    return mergedList
+    mergedList = loadComponents(fetchComponents)
+    mergedFetchTime = round((time()-startTime)*1000)
+    print(f"{c_green}==> merged fetch took {c_orange}{mergedFetchTime}ms{c_default}")
+    
+    print(f"\nHardware : {mergedList}")
 
 def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
 
-    partialDetect()
-    exit()
-    
-    hardware = {}
-    configs = []
+    hardware = loadComponents(fetchComponents)
+    configs = {}
 
     if benchmarkFetch: 
-        print("Starting benchmarking sequence...")
-        hardware = benchmark()
+        print(f"{c_blue}Starting benchmarking sequence...{c_default}")
+        benchmark()
         
     if listConfigs: 
-        print("\nListing hardware configs...")
+        print(f"{c_blue}\nListing hardware configs...{c_default}")
         configs = {}
-        if len(hardware) == 0: hardware = loadComponents(fetchComponents)
 
         for c in loadConfigs():
             configs[c] = matchConfig(c,hardware)
@@ -401,10 +396,20 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
         for c in sorted(configs.items(), key=lambda k:k[1], reverse=True):
             print(f"    - {trimConfigName(c[0])} : {c[0]}")
             print(f"      matches: {c[1]}/{len(hardware)}")
-        print(f"    ==> {len(configs)} config{'s' if len(configs) > 1 else ''} found")
+        print(f"{c_green}==> {c_orange}{len(configs)} config{'s' if len(configs) > 1 else ''}{c_green} found{c_default}")
+        
+        print(f"{c_blue}\nStarting detection benchmark...{c_default}")
+        startTime = time()
+        detect()
+        finalTime = round((time()-startTime)*1000)
+        print(f"{c_green}==> normal detection took {c_orange}{finalTime}ms{c_default}")
+        startTime = time()
+        partialDetect()
+        finalTime = round((time()-startTime)*1000)
+        print(f"{c_green}==> partial detection took {c_orange}{finalTime}ms{c_default}")
             
     if listScripts: 
-        print("\nListing startup scripts...")
+        print(f"{c_blue}\nListing startup scripts...{c_default}")
         if len(configs) == 0: configs = loadConfigs()
 
         for c in configs:
@@ -483,17 +488,25 @@ match argument:
             subprocess.run("fastfetch -v", shell=True, capture_output=True, check=True)
         except subprocess.CalledProcessError:
             print("ERROR : fastfetch not found! please ensure fastfetch is present and available.\nAborting detection!")
-            
             exit()
         
         print("Detecting hardware configuration...")
+        config = None
         if PARTIAL_FETCH:
             printVerbose("using partial detection")
-            partialDetect()
+            config = partialDetect()
         else:
-            detect()
+            config = detect()
+        
+        if config == None:
+            print("No config found! Using unknown_config instead.")
+            config = unknownConfig
+
+        print(f"using config [{trimConfigName(config)}]")
+        writeConfig(config)
 
     case "test":
+        VERBOSE = True
         if len(argv) == 2 : test()
         else:
             test(
