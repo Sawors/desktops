@@ -17,6 +17,107 @@ import shutil
 #   - [X] add to git
 #
 
+mode = argv[1]
+detectMode = "detect"
+applyMode = "apply"
+testMode = "test"
+createMode = "create"
+
+def printHelpMessage(single_mode=True):
+    helpDetect = """Desktops : Detection mode
+This mode detects the current hardware used, compares it with the found hardare configs, and writes the result to disk.
+
+    usage: desktops detect [OPTIONS]
+
+    optional args:
+     -m, --exact-match  the config must exacly match the hardware, otherwise nothing is done
+     -p, --partial      fetch only an optimised section of the hardware
+     -r, --no-write     do not write the found config to disk
+     -v, --verbose      print additional runtime information
+    """
+
+    helpApply = """Desktops : Application mode
+This mode applies the launch scripts of the found hardware configuration. There is two phases for the application sequence: root and user phases.
+
+    usage: desktops apply [OPTIONS]
+    
+    optional args:
+     -r, --root                set the root script as the launch script to use
+     -t=<type>, --type=<type>  pass <type> to the launch script as its first argument
+     -v, --verbose             print additional runtime information
+    """
+
+    helpTest = """Desktops : Test mode
+Benchmarking mode. Usefull if you need to know how much time fetching takes, or where are located hardware configs and launch scripts.
+
+    usage : desktops test [OPTIONS]
+
+    optinal args:
+     -b, --benchmark  enable benchmark
+     -c, --configs    enable configs listing
+     -s, --scripts    enable scripts listing
+
+     note: By default benchmark, configs and scripts are enabled. 
+     Specifying one of them will disable the other unless explicitly enabled.
+    """
+
+    helpCreate = """Desktops : creation mode
+This mode allows you to automatically create a hardware configuration from your current hardware.
+
+    usage: desktops create <configname> [OPTIONS]
+
+    required args:
+    <configname>              the name of the config to be created 
+    
+    optional args:
+    -n=<name>, --name=<name>  tell explicitly the name of the config (same as desktops create <name>)
+
+    note: If you are using -n= you can ommit specifying the config name as second argument
+    """
+
+    mergedHelp = f"""
+DETECT MODE : {helpDetect}
+
+APPLY MODE : {helpApply}
+
+CREATE MODE : {helpCreate}
+
+TEST MODE : {helpTest}"""
+
+    if single_mode:
+        if mode == detectMode:
+            print(helpDetect)  
+        
+        elif mode == applyMode:
+            print(helpApply)  
+        
+        elif mode == testMode:
+            print(helpTest)  
+        
+        elif mode == createMode:
+            print(helpCreate)  
+        else :
+            print(mergedHelp)
+    else:
+        print(mergedHelp)
+    
+
+if "-h" in argv or "--help" in argv:
+    if len(argv) > 2:
+        printHelpMessage()
+    else:
+        print("""Desktops
+    usage: desktops <mode>
+
+    Available modes:
+        detect
+        apply
+        create
+        test
+
+     to obtain help on a specific mode, use: desktops <mode> --help""")
+    exit()
+
 # general
 root = "/etc/desktops"
 computers = "hardware"
@@ -279,10 +380,10 @@ def getStartupScripts(configDir: str, identifier: str) -> list:
     return configs
     
 
-def apply(args: list):
+def apply():
     # the config will be applied as the current user. For any operation requiring root privileges please edit /etc/sddm/Xsetup.
     passedArgument = ""
-    for typeArg in args:
+    for typeArg in argv:
         if typeArg.startswith("--type=") or typeArg.startswith("-t="):
             passedArgument = typeArg[typeArg.index('=')+1:len(typeArg)]
             break
@@ -290,7 +391,7 @@ def apply(args: list):
     config = None
     scripts = [None]*2
 
-    isRoot = "--root" in args or "-r" in args
+    isRoot = "--root" in argv or "-r" in argv
 
     def checkSure():
         sure = input("Are you sure this is what you want to do ? (y/N): ").lower() in ["y","yes"]
@@ -480,10 +581,7 @@ if len(argv) < 2:
         test""")
     exit()
 
-argument = argv[1]
-
-match argument:
-    case "detect":
+if mode ==  detectMode:
         try:
             subprocess.run("fastfetch -v", shell=True, capture_output=True, check=True)
         except subprocess.CalledProcessError:
@@ -505,21 +603,21 @@ match argument:
         print(f"using config [{trimConfigName(config)}]")
         writeConfig(config)
 
-    case "test":
+elif mode ==  testMode:
         VERBOSE = True
         if len(argv) == 2 : test()
         else:
             test(
-                benchmarkFetch = "--benchmark" in argv or "--hardware" in argv,
-                listConfigs = "--configs" in argv,
-                listScripts = "--scripts" in argv,
+                benchmarkFetch = "--benchmark" in argv or "-b" in argv,
+                listConfigs = "--configs" in argv or "-c" in argv,
+                listScripts = "--scripts" in argv or "-s" in argv,
             )
-        
-    case "apply":
+
+elif mode == applyMode:
         print("Launching startup script...")
         apply(argv)
 
-    case "create":
+elif mode == createMode:
         name = ""
         for a in argv:
             if a.startswith("--name=") or a.startswith("-n="):
