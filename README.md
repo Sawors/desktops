@@ -6,6 +6,18 @@
 1. Initial detection of the hardware and triggering of root launch scripts
 2. Triggering of user launch scripts
 
+The main commands of *desktops* are :
+```bash
+# Detects the currently used config, and write the found config to disk.
+desktops detect
+```
+```bash
+# Executes startup scripts for the current config
+desktops apply
+```
+
+>For more commands, run `desktops --help`
+
 ## Hardware Configs
 Desktops is based on a **hardware config** system. Each combination of hardware you want to detect is defined in a `yaml` file named `components.yml`. These files will be loaded during the early detection of the hardware. 
 
@@ -31,11 +43,11 @@ hardware/
 The name of the directory the components are stored in is used as the name of the config.
 When the hardware detection is first run, it will attempt to read each `components.yml` file to determine the closest match of hardware (this description follows a specific structure, TODO : ADD WIKI LINK).
 
-### Startup scripts
-#### Root script
+## Startup scripts
+### Root script
 When the initial detection is done and the config is found, the `root-launch.sh` script is immediately run as root. Please ensure that the permissions of this file are properly set to avoid the execution of unknown code with root privileges.
 
-#### User scripts
+### User scripts
 Once the inital detection and root startup has been executed, scripts are no more automatically executed and user scripts should be started manually.
 
 To start user scripts, use `desktops apply` while logged in to start them. User scripts can be in two locations :
