@@ -1,8 +1,8 @@
 # desktops
-*Desktops* is a lightweight tool designed to allow you to use a single operating system on different hardware. Its primary usage is to allow operating systems installed on bootable external hard drives to be used seamlessly on different machines.
+*desktops* is a lightweight tool designed to allow you to use a single operating system on different hardware. Its primary usage is to allow operating systems installed on bootable external hard drives to be used seamlessly on different machines.
 
 ## Usage
-*Desktops* is launched at startup during the boot process. It acts in 2 phases :
+*desktops* is launched at startup during the boot process. It acts in 2 phases :
 1. Initial detection of the hardware and triggering of root launch scripts
 2. Triggering of user launch scripts
 
@@ -35,7 +35,7 @@ When the hardware detection is first run, it will attempt to read each `componen
 #### Root script
 When the initial detection is done and the config is found, the `root-launch.sh` script is immediately run as root. Please ensure that the permissions of this file are properly set to avoid the execution of unknown code with root privileges.
 
-#### User script
+#### User scripts
 Once the inital detection and root startup has been executed, scripts are no more automatically executed and user scripts should be started manually.
 
 To start user scripts, use `desktops apply` while logged in to start them. User scripts can be in two locations :
