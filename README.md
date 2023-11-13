@@ -31,10 +31,17 @@ hardware/
 The name of the directory the components are stored in is used as the name of the config.
 When the hardware detection is first run, it will attempt to read each `components.yml` file to determine the closest match of hardware (this description follows a specific structure, TODO : ADD WIKI LINK).
 
->Note : if you need to match only exactly corresponding hardware, a config option should be added soon to restrict the matching process
-
 ### Startup scripts
+#### Root script
 When the initial detection is done and the config is found, the `root-launch.sh` script is immediately run as root. Please ensure that the permissions of this file are properly set to avoid the execution of unknown code with root privileges.
 
-Once the inital detection and root startup has been executed, scripts are no more automatically executed and user scripts should be started manually.  
+#### User script
+Once the inital detection and root startup has been executed, scripts are no more automatically executed and user scripts should be started manually.
 
+To start user scripts, use `desktops apply` while logged in to start them. User scripts can be in two locations :
+- `/usr/share/desktops/hardware/<config_name>/user-launch.sh`
+- `~/.config/desktops/hardware/<config_name>/user-launch.sh`
+
+Using two different locations allows you to create a general user script, which will be executed for all users when they log in, and user-specific scripts.
+
+In order of execution, the general script located in `/usr/.../<config_name>` will be executed **before** the script in the user's home directory.
