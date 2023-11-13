@@ -615,7 +615,7 @@ elif mode ==  testMode:
 
 elif mode == applyMode:
         print("Launching startup script...")
-        apply(argv)
+        apply()
 
 elif mode == createMode:
         name = ""
