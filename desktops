@@ -194,7 +194,7 @@ def writeConfig(config_dir: str):
     try:
         with open(currentUsedConfig, "w") as current:
             current.write(f"{configName}\n{baseDir}\n")
-            os.chmod(current.name, stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH | stat.S_IRGRP | stat.S_IWGRP)
+            os.chmod(current.name, stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH |  stat.S_IWOTH | stat.S_IRGRP | stat.S_IWGRP)
     except PermissionError as p:
         print(f"[!] Could not write config to disk, permission denied!")
 
@@ -614,6 +614,13 @@ elif mode ==  testMode:
             )
 
 elif mode == applyMode:
+
+        if not path.isfile(currentUsedConfig):
+            subprocess.run(f"/bin/env python3 {argv[0]} detect")
+            if not path.isfile(currentUsedConfig):
+                print("Config detection failed, please try again as root!")
+                exit()
+            
         print("Launching startup script...")
         apply()
 
