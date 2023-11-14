@@ -528,7 +528,7 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
                 c1 = c_magenta
                 c2 = c_orange
             print(f"    {c1}[{c2}{trimConfigName(c)}{c1}] :")
-            print(f"        {c2+'> ' if isRoot else c1}root{c1} :")
+            print(f"     {c2+'-> ' if isRoot else c1}root{c1} :")
             for sc in getStartupScripts(c, rootScriptIdentifier):
                 print(f"            0. {sc}")
             print(f"     {c2+'-> ' if not isRoot else c1}user{c1} :")
