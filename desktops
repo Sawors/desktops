@@ -145,10 +145,11 @@ VERBOSE = "--verbose" in argv or "-v" in argv
 
 # colors
 c_orange = "\033[93m"
+c_cyan = "\033[36m"
 c_green = "\033[92m"
 c_blue = "\033[94m"
+c_magenta = "\033[95m"
 c_default = "\033[39m"
-
 
 # takes raw data, and attempts to make it standardized.
 # Data should be split with one component per key (and monitor amount pre-computed)
@@ -469,19 +470,19 @@ def benchmark():
     totalTime = sum(fetchTimes.values())
     for k,v in sorted(fetchTimes.items(), key=lambda k:k[1], reverse=False):
         print(f"    - fetched {k} in {v}ms ({round(100*v/totalTime)}%)")
-    print(f"{c_green}==> all fetches took {c_orange}{totalTime}ms{c_green} in total{c_default}")
+    print(f"{c_green}==> all fetches took {c_cyan}{totalTime}ms{c_green} in total{c_default}")
     print(f"{c_blue}\nStarting merged fetch benchmark...{c_default}")
     startTime = time()
     mergedList = loadComponents(fetchComponents)
     mergedFetchTime = round((time()-startTime)*1000)
-    print(f"{c_green}==> merged fetch took {c_orange}{mergedFetchTime}ms{c_default}")
+    print(f"{c_green}==> merged fetch took {c_cyan}{mergedFetchTime}ms{c_default}")
     
     print(f"\nHardware : {mergedList}")
 
 def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
 
     hardware = loadComponents(fetchComponents)
-    configs = {}
+    current = detect()+"/"+configFormat
 
     if benchmarkFetch: 
         print(f"{c_blue}Starting benchmarking sequence...{c_default}")
@@ -495,32 +496,45 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
             configs[c] = matchConfig(c,hardware)
         
         for c in sorted(configs.items(), key=lambda k:k[1], reverse=True):
-            print(f"    - {trimConfigName(c[0])} : {c[0]}")
-            print(f"      matches: {c[1]}/{len(hardware)}")
-        print(f"{c_green}==> {c_orange}{len(configs)} config{'s' if len(configs) > 1 else ''}{c_green} found{c_default}")
+            c1 = c_default
+            c2 = c_default
+            if c[0] == current:
+                c1 = c_magenta
+                c2 = c_orange
+            print(f"    {c1}- {c2}{trimConfigName(c[0])}{c1} : {c[0]}")
+            print(f"      {c2}matches: {c[1]}/{len(hardware)}{c_default}")
+        print(f"{c_green}==> {c_cyan}{len(configs)} config{'s' if len(configs) > 1 else ''}{c_green} found{c_default}")
         
         print(f"{c_blue}\nStarting detection benchmark...{c_default}")
         startTime = time()
         detect()
         finalTime = round((time()-startTime)*1000)
-        print(f"{c_green}==> normal detection took {c_orange}{finalTime}ms{c_default}")
+        print(f"{c_green}==> normal detection took {c_cyan}{finalTime}ms{c_default}")
         startTime = time()
         partialDetect()
         finalTime = round((time()-startTime)*1000)
-        print(f"{c_green}==> partial detection took {c_orange}{finalTime}ms{c_default}")
+        print(f"{c_green}==> partial detection took {c_cyan}{finalTime}ms{c_default}")
             
     if listScripts: 
         print(f"{c_blue}\nListing startup scripts...{c_default}")
         if len(configs) == 0: configs = loadConfigs()
 
+        isRoot = os.geteuid() == 0
+        
         for c in configs:
-            print(f"    [{trimConfigName(c)}] :")
-            print( "        root :")
+            c1 = c_default
+            c2 = c_default
+            if c == current:
+                c1 = c_magenta
+                c2 = c_orange
+            print(f"    {c1}[{c2}{trimConfigName(c)}{c1}] :")
+            print(f"        {c2+'> ' if isRoot else c1}root{c1} :")
             for sc in getStartupScripts(c, rootScriptIdentifier):
-                print(f"        - {sc}")
-            print( "        user :")
-            for sc in getStartupScripts(c, userScriptIdentifier):
-                print(f"        - {sc}")
+                print(f"            0. {sc}")
+            print(f"     {c2+'-> ' if not isRoot else c1}user{c1} :")
+            for sc in enumerate(getStartupScripts(c, userScriptIdentifier)):
+                print(f"            {sc[0]+1}. {sc[1]}")
+            if c == current: print(c_default)
 
 
 def create(name:str):
