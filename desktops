@@ -153,9 +153,9 @@ c_default = "\033[39m"
 
 # takes raw data, and attempts to make it standardized.
 # Data should be split with one component per key (and monitor amount pre-computed)
-# this methods DOES NO ALTER THE BASE COLLECTION, but it does clone it, thus increasing memory footprint
+# this methods DOES NOT ALTER THE BASE COLLECTION, but it does clone it, thus sadly increasing memory footprint
 # NOTE : this method works for fast fetch only
-# TODO : move this to the fastfetch implementation
+# TODO : move this to modulated implementations
 def standardizeData(rawData: dict) -> dict:
     data = rawData.copy()
     for rawKey in rawData.keys():
