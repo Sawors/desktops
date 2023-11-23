@@ -24,7 +24,7 @@ testMode = "test"
 createMode = "create"
 
 def printHelpMessage(single_mode=True):
-    helpDetect = """Desktops : Detection mode
+    helpDetect = """Desktops: Detection mode
 This mode detects the current hardware used, compares it with the found hardare configs, and writes the result to disk.
 
     usage: desktops detect [OPTIONS]
@@ -36,7 +36,7 @@ This mode detects the current hardware used, compares it with the found hardare 
      -v, --verbose      print additional runtime information
     """
 
-    helpApply = """Desktops : Application mode
+    helpApply = """Desktops: Application mode
 This mode applies the launch scripts of the found hardware configuration. There is two phases for the application sequence: root and user phases.
 
     usage: desktops apply [OPTIONS]
@@ -47,10 +47,10 @@ This mode applies the launch scripts of the found hardware configuration. There 
      -v, --verbose             print additional runtime information
     """
 
-    helpTest = """Desktops : Test mode
+    helpTest = """Desktops: Test mode
 Benchmarking mode. Usefull if you need to know how much time fetching takes, or where are located hardware configs and launch scripts.
 
-    usage : desktops test [OPTIONS]
+    usage: desktops test [OPTIONS]
 
     optinal args:
      -b, --benchmark  enable benchmark
@@ -61,7 +61,7 @@ Benchmarking mode. Usefull if you need to know how much time fetching takes, or 
      Specifying one of them will disable the other unless explicitly enabled.
     """
 
-    helpCreate = """Desktops : creation mode
+    helpCreate = """Desktops: creation mode
 This mode allows you to automatically create a hardware configuration from your current hardware.
 
     usage: desktops create <configname> [OPTIONS]
@@ -76,13 +76,13 @@ This mode allows you to automatically create a hardware configuration from your 
     """
 
     mergedHelp = f"""
-DETECT MODE : {helpDetect}
+DETECT MODE: {helpDetect}
 
-APPLY MODE : {helpApply}
+APPLY MODE: {helpApply}
 
-CREATE MODE : {helpCreate}
+CREATE MODE: {helpCreate}
 
-TEST MODE : {helpTest}"""
+TEST MODE: {helpTest}"""
 
     if single_mode:
         if mode == detectMode:
@@ -423,7 +423,7 @@ def apply():
             configPath = lines[1].strip()
             configDir = configPath if path.isdir(configPath) else path.dirname(configPath)
     except:
-        print(f"Access to current config in {currentUsedConfig} refused : Unsufficient permission")
+        print(f"Access to current config in {currentUsedConfig} refused: Unsufficient permission")
         exit()
     
     if config == None or len(config) == 0:
@@ -457,14 +457,14 @@ def benchmark():
     configs = loadConfigs()
     fetchTimes = {}
     fetchResult = {}
-    print(f"Split fetch timings :")
+    print(f"Split fetch timings:")
     for identifier in compSet:
         baseTime = time()
         try:
             output = subprocess.check_output(f"fastfetch --pipe -s {identifier} --multithreading", shell=True).decode("UTF-8")
             fetchTimes[identifier] = round((time()-baseTime)*1000)
             fetchResult[identifier] = output
-        except subprocess.CalledProcessError :
+        except subprocess.CalledProcessError:
             print("an error occured when fetching the data !")
 
     totalTime = sum(fetchTimes.values())
@@ -477,7 +477,7 @@ def benchmark():
     mergedFetchTime = round((time()-startTime)*1000)
     print(f"{c_green}==> merged fetch took {c_cyan}{mergedFetchTime}ms{c_default}")
     
-    print(f"\nHardware : {mergedList}")
+    print(f"\nHardware: {mergedList}")
 
 def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
 
@@ -501,7 +501,7 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
             if c[0] == current:
                 c1 = c_magenta
                 c2 = c_orange
-            print(f"    {c1}- {c2}{trimConfigName(c[0])}{c1} : {c[0]}")
+            print(f"    {c1}- {c2}{trimConfigName(c[0])}{c1}: {c[0]}")
             print(f"      {c2}matches: {c[1]}/{len(hardware)}{c_default}")
         print(f"{c_green}==> {c_cyan}{len(configs)} config{'s' if len(configs) > 1 else ''}{c_green} found{c_default}")
         
@@ -509,7 +509,7 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
         startTime = time()
         detect()
         finalTime = round((time()-startTime)*1000)
-        print(f"{c_green}==> normal detection took {c_cyan}{finalTime}ms{c_default}")
+        print(f"{c_green}==> normal detection took {c_cyan}{finalTime}ms{c_default}\n")
         startTime = time()
         partialDetect()
         finalTime = round((time()-startTime)*1000)
@@ -524,17 +524,20 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
         for c in configs:
             c1 = c_default
             c2 = c_default
-            if c == current:
+            isCurrent = c == current
+            
+            if isCurrent:
                 c1 = c_magenta
                 c2 = c_orange
-            print(f"    {c1}[{c2}{trimConfigName(c)}{c1}] :")
-            print(f"     {c2+'-> ' if isRoot else c1}root{c1} :")
+                
+            print(c_default)
+            print(f"    {c1}[{c2}{trimConfigName(c)}{c1}]:")
+            print(f"     {c2 if isRoot else c1}{'-> ' if isCurrent and isRoot else ''}root{c1}:")
             for sc in getStartupScripts(c, rootScriptIdentifier):
-                print(f"            0. {sc}")
-            print(f"     {c2+'-> ' if not isRoot else c1}user{c1} :")
+                print(f"        0. {sc}")
+            print(f"     {c2 if not isRoot else c1}{'-> ' if isCurrent and not isRoot else ''}user{c1}:")
             for sc in enumerate(getStartupScripts(c, userScriptIdentifier)):
-                print(f"            {sc[0]+1}. {sc[1]}")
-            if c == current: print(c_default)
+                print(f"        {sc[0]+1}. {sc[1]}")
 
 
 def create(name:str):
