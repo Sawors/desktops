@@ -1,6 +1,10 @@
 [Unit]
 Description=Starts the user startup scripts of the detected hardware config
 Wants=graphical-session.target
+# probing each 2 seconds during 1 minute
+# NOT CURRENTLY IN USE 
+#StartLimitIntervalSec=2
+#StartLimitBurst=30
 
 [Service]
 Type=forking
@@ -8,3 +12,4 @@ ExecStart=/etc/desktops/desktops apply --type=boot
 
 [Install]
 WantedBy=graphical-session.target
+Restart=on-failure
