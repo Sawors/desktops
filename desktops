@@ -237,8 +237,10 @@ def loadComponents(components: list) -> dict:
     return standardizeData(dataMap)
 
 
-# returns the number of matching fields (so that a general config may be applied if all other fail and exact match is set to false)
 def matchConfig(config: str, dataMap: dict, exactMatch=False) -> int:
+    """
+    returns the number of matching fields (so that a general config may be applied if all other fail and exact match is set to false)
+    """
     if (not path.isfile(config)) or dataMap == None or len(dataMap) == 0: return 0
     matching = 0
     try:
@@ -257,9 +259,12 @@ def matchConfig(config: str, dataMap: dict, exactMatch=False) -> int:
     return matching
 
 
-# returns a dict containing the paths to the configs found. It loads the configs found in the users home directory
-# and the ones defines in TODO config.yml
+
 def loadConfigs() -> set:
+    """
+    returns a dict containing the paths to the configs found. It loads the configs found in the users home directory
+    and the ones defines in TODO config.yml
+    """
     userConfigs = set()
     homeDir = "/home"
     if not path.isdir(homeDir): return userConfigs
@@ -372,12 +377,14 @@ def getStartupScripts(configDir: str, identifier: str) -> list:
 
     if dirPath[len(dirPath)-1] == '/': dirPath = dirPath[0:len(dirPath)-2]
     genConfigFile = f"{dirPath}/{identifier}"
-    if path.isfile(genConfigFile) : configs.append(genConfigFile)
+    if path.isfile(genConfigFile) :
+        configs.append(genConfigFile)
 
     if identifier == userScriptIdentifier:
-        userConfig = path.expanduser(f"~/.config/desktops/{computers}/{trimConfigName(configDir)}/{userScriptIdentifier}")
-        if path.isfile(userConfig): configs.append(userConfig)
-    
+        userConfig = path.expanduser(f"$HOME/.config/desktops/{computers}/{trimConfigName(configDir)}/{userScriptIdentifier}")
+        if path.isfile(userConfig):
+            configs.append(userConfig)
+            
     return configs
     
 
@@ -532,10 +539,10 @@ def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
                 
             print(c_default)
             print(f"    {c1}[{c2}{trimConfigName(c)}{c1}]:")
-            print(f"     {c2 if isRoot else c1}{'-> ' if isCurrent and isRoot else ''}root{c1}:")
+            print(f"      {c2 if isRoot else c1}root{c1}:")
             for sc in getStartupScripts(c, rootScriptIdentifier):
                 print(f"        0. {sc}")
-            print(f"     {c2 if not isRoot else c1}{'-> ' if isCurrent and not isRoot else ''}user{c1}:")
+            print(f"      {c2 if not isRoot else c1}user{c1}:")
             for sc in enumerate(getStartupScripts(c, userScriptIdentifier)):
                 print(f"        {sc[0]+1}. {sc[1]}")
 
