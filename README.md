@@ -21,7 +21,7 @@ desktops apply
 ## Hardware Configs
 Desktops is based on a **hardware config** system. Each combination of hardware you want to detect is defined in a `yaml` file named `components.yml`. These files will be loaded during the early detection of the hardware. 
 
-The default location for hardware configs is `/usr/share/desktops/hardware/`, but other configs located in `<script directory>/hardware/` may be loaded if present.
+The default location for hardware configs is `/etc/desktops/hardware/`.
 
 ### File structure
 Each config consists of a directory containing a hardware description, and a few startup scripts.
@@ -51,9 +51,9 @@ When the initial detection is done and the config is found, the `root-launch.sh`
 Once the inital detection and root startup has been executed, scripts are no more automatically executed and user scripts should be started manually.
 
 To start user scripts, use `desktops apply` while logged in to start them. User scripts can be in two locations :
-- `/usr/share/desktops/hardware/<config_name>/user-launch.sh`
+- `/etc/desktops/hardware/<config_name>/user-launch.sh`
 - `~/.config/desktops/hardware/<config_name>/user-launch.sh`
 
 Using two different locations allows you to create a general user script, which will be executed for all users when they log in, and user-specific scripts.
 
-In order of execution, the general script located in `/usr/.../<config_name>` will be executed **before** the script in the user's home directory.
+In order of execution, the general script located in `/etc/.../<config_name>` will be executed **before** the script in the user's home directory.
