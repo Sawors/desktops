@@ -215,6 +215,20 @@ class HardwareConfig:
 
         return matching
 
+    def UnknownConfig():
+        return HardwareConfig(UNKNOWN_CONFIG_NAME, load_scripts=False)
+
+def save_config(config:HardwareConfig):
+    # not in the HardwareConfig class to prevent
+    # abuse in saving configs. This operation
+    # should be done very rarely (or when using)
+    # desktops create
+    if not path.isdir(config.get_general_config_dir()):
+        os.makedirs(config.get_general_config_dir())
+    with open(config.get_component_file(), "w", encoding=ENCODING) as output:
+        output.write(yaml.safe_dump(config.components))
+
+
 def print_verbose(text: str, verbose=True):
     if verbose:
         print(text)
@@ -261,7 +275,7 @@ def fetch_components(components: list) -> dict:
     except subprocess.CalledProcessError as er:
         print("an error occured when fetching the data !")
         print("no config found")
-        set_current_config(HardwareConfig(UNKNOWN_CONFIG_NAME,load_scripts=False))
+        set_current_config(UNKNOWN_CONFIG)
         raise er
 
     fetched = output.strip().splitlines()
@@ -337,7 +351,7 @@ def full_detect(exact_match=False, verbose=False) -> HardwareConfig:
         print_verbose(f"config matching done in {total_time-fetch_time}ms")
         print_verbose(f"complete config detection done in {total_time}ms")
 
-    return HardwareConfig(UNKNOWN_CONFIG_NAME,load_scripts=False)
+    return HardwareConfig.UnknownConfig()
 
 def partial_detect(verbose=False) -> HardwareConfig:
     found_configs = load_configs()
@@ -356,7 +370,7 @@ def partial_detect(verbose=False) -> HardwareConfig:
             unused_components.append(c)
 
     refetch_amount = 0
-    conf = HardwareConfig(UNKNOWN_CONFIG_NAME,load_scripts=False)
+    conf = HardwareConfig.UnknownConfig()
 
     for i in unused_components:
         if len(i) > 0:
@@ -387,7 +401,7 @@ def partial_detect(verbose=False) -> HardwareConfig:
         print_verbose(f"config matching done with {refetch_amount} additionnal fetch{'es' if refetch_amount > 1 else ''}")
         print_verbose(f"complete config detection done in {total_time}ms")
 
-    return HardwareConfig(UNKNOWN_CONFIG_NAME,load_scripts=False)
+    return HardwareConfig.UnknownConfig()
 
 
 def apply(current_config:HardwareConfig, passed_arguments="", is_root=False):
@@ -486,6 +500,7 @@ def test(benchmark_fetch = True, list_configs = True, list_scripts = True):
 
     hardware = fetch_components(FULL_FETCH_CONTENT)
     current = get_current_config()
+    configs = {}
 
     if benchmark_fetch:
         print(f"{C_BLUE}Starting benchmarking sequence...{C_RESET}")
@@ -493,7 +508,6 @@ def test(benchmark_fetch = True, list_configs = True, list_scripts = True):
 
     if list_configs:
         print(f"{C_BLUE}\nListing hardware configs...{C_RESET}")
-        configs = {}
 
         for c in load_configs():
             configs[c] = c.match(hardware,exact_match=False)
@@ -530,7 +544,7 @@ def test(benchmark_fetch = True, list_configs = True, list_scripts = True):
 
         for c in configs:
             c.load_scripts()
-            c1 = C_RESET
+            c1 = C_GRAY
             c2 = C_RESET
             is_current = c.name == current.name
 
@@ -613,7 +627,7 @@ def main(args:list) -> int:
                 found_config = full_detect()
             if found_config is None:
                 print("No config found! Using unknown_config instead.")
-                found_config = HardwareConfig(UNKNOWN_CONFIG_NAME,load_scripts=False)
+                found_config = HardwareConfig.UnknownConfig()
             print(f"using config [{found_config.name}]")
             set_current_config(found_config)
 
@@ -672,5 +686,7 @@ def main(args:list) -> int:
 
 
 if __name__ == "__main__":
+    # make sure at least unknown_config exists
+    save_config(HardwareConfig.UnknownConfig())
     EXIT_CODE = main(os.sys.argv[1:len(argv)])
     os.sys.exit(EXIT_CODE)
