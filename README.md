@@ -39,7 +39,7 @@ hardware/
   │
   └...
 ```
-
+ 
 The name of the directory the components are stored in is used as the name of the config.
 When the hardware detection is first run, it will attempt to read each `components.yml` file to determine the closest match of hardware (this description follows a specific structure, TODO : ADD WIKI LINK).
 
