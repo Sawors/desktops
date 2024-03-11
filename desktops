@@ -1,4 +1,5 @@
 #!/bin/env python3
+
 from os import system
 from os import path
 import os
@@ -6,62 +7,53 @@ from sys import argv
 from time import time
 import stat
 import subprocess
-import glob
-import yaml
-import tempfile
+from encodings import utf_8
 import shutil
+# external
+import yaml
 
-# TODO 
-#   - [ ] add program config support
-#   - [~] create README
-#   - [X] add to git
-#
+class RunMode:
+    DETECT = "detect"
+    APPLY = "apply"
+    TEST = "test"
+    CREATE = "create"
 
-mode = argv[1]
-detectMode = "detect"
-applyMode = "apply"
-testMode = "test"
-createMode = "create"
-
-def printHelpMessage(single_mode=True):
-    helpDetect = """Desktops: Detection mode
+    help_messages = {
+        DETECT: """Desktops: Detection mode
 This mode detects the current hardware used, compares it with the found hardare configs, and writes the result to disk.
 
     usage: desktops detect [OPTIONS]
 
     optional args:
-     -m, --exact-match  the config must exacly match the hardware, otherwise nothing is done
-     -p, --partial      fetch only an optimised section of the hardware
-     -r, --no-write     do not write the found config to disk
-     -v, --verbose      print additional runtime information
-    """
-
-    helpApply = """Desktops: Application mode
+    -m, --exact-match  the config must exacly match the hardware, otherwise nothing is done
+    -p, --partial      fetch only an optimised section of the hardware
+    -r, --no-write     do not write the found config to disk
+    -v, --verbose      print additional runtime information
+    """,
+        APPLY: """Desktops: Application mode
 This mode applies the launch scripts of the found hardware configuration. There is two phases for the application sequence: root and user phases.
 
     usage: desktops apply [OPTIONS]
     
     optional args:
-     -r, --root                set the root script as the launch script to use
-     -t=<type>, --type=<type>  pass <type> to the launch script as its first argument
-     -v, --verbose             print additional runtime information
-    """
-
-    helpTest = """Desktops: Test mode
+    -r, --root                set the root script as the launch script to use
+    -t=<type>, --type=<type>  pass <type> to the launch script as its first argument
+    -v, --verbose             print additional runtime information
+    """,
+        TEST: """Desktops: Test mode
 Benchmarking mode. Usefull if you need to know how much time fetching takes, or where are located hardware configs and launch scripts.
 
     usage: desktops test [OPTIONS]
 
     optinal args:
-     -b, --benchmark  enable benchmark
-     -c, --configs    enable configs listing
-     -s, --scripts    enable scripts listing
+    -b, --benchmark  enable benchmark
+    -c, --configs    enable configs listing
+    -s, --scripts    enable scripts listing
 
-     note: By default benchmark, configs and scripts are enabled. 
-     Specifying one of them will disable the other unless explicitly enabled.
-    """
-
-    helpCreate = """Desktops: creation mode
+    note: By default benchmark, configs and scripts are enabled. 
+    Specifying one of them will disable the other unless explicitly enabled.
+    """,
+        CREATE: """Desktops: creation mode
 This mode allows you to automatically create a hardware configuration from your current hardware.
 
     usage: desktops create <configname> [OPTIONS]
@@ -73,69 +65,35 @@ This mode allows you to automatically create a hardware configuration from your 
     -n=<name>, --name=<name>  tell explicitly the name of the config (same as desktops create <name>)
 
     note: If you are using -n= you can ommit specifying the config name as second argument
-    """
+    """,
+    "": """
+    Please specify an action.
+    Usage :
+        desktops <ACTION> [OPTIONS]
 
-    mergedHelp = f"""
-DETECT MODE: {helpDetect}
-
-APPLY MODE: {helpApply}
-
-CREATE MODE: {helpCreate}
-
-TEST MODE: {helpTest}"""
-
-    if single_mode:
-        if mode == detectMode:
-            print(helpDetect)  
-        
-        elif mode == applyMode:
-            print(helpApply)  
-        
-        elif mode == testMode:
-            print(helpTest)  
-        
-        elif mode == createMode:
-            print(helpCreate)  
-        else :
-            print(mergedHelp)
-    else:
-        print(mergedHelp)
-    
-
-if "-h" in argv or "--help" in argv:
-    if len(argv) > 2:
-        printHelpMessage()
-    else:
-        print("""Desktops
-    usage: desktops <mode>
-
-    Available modes:
+    Possible actions are :
         detect
         apply
         create
         test
+        
+    to get help on an action, run :
+        desktops <ACTION> --help"""
+    }
 
-     to obtain help on a specific mode, use: desktops <mode> --help""")
-    exit()
 
 # general
-root = "/etc/desktops"
-computers = "hardware"
-defaultHardwareLocation = f"/usr/share/desktops/{computers}"
-hardwareLocations = [defaultHardwareLocation, f"{root}/{computers}"]
-currentUsedConfig = f"{tempfile.gettempdir()}/desktops_current"
-configFormat = "components.yml"
-unknownConfig = f"{defaultHardwareLocation}/unknown_config"
-displayIdentifier = "Display"
-memoryIdentifier = "memory"
-cpuIdentifier = "cpu"
-rootScriptIdentifier = "root-launch.sh"
-userScriptIdentifier = "user-launch.sh"
-userConfigLocation = f".config/desktops/{computers}"
+ENCODING=utf_8.getregentry().name
+ROOT_DIR_NAME = "desktops"
+ROOT_DIR = f"/etc/{ROOT_DIR_NAME}"
+HARDWARE_CONFIG_DIR_NAME = "hardware"
+HARDWARE_CONFIG_DIR = f"{ROOT_DIR}/{HARDWARE_CONFIG_DIR_NAME}"
+CURRENT_CONFIG_FILE = f"{ROOT_DIR}/desktops_current"
+UNKNOWN_CONFIG_NAME = "unknown_config"
 # ideally sorted in order, from quickest to slowest
-fetchComponents = ["Board","CPU","Memory","GPU","Display"]
+FULL_FETCH_CONTENT = ["Board","CPU","Memory","GPU","Display"]
 # partial fetch
-partialFetchComponents = ["Board","CPU","Memory"]
+PARTIAL_FETCH_CONTENT = ["Board","CPU","Memory"]
 
 # arguments
 EXACT_MATCH = "--exact-match" in argv or "-m" in argv
@@ -144,444 +102,483 @@ WRITE_CONFIG = not ("--no-write" in argv or "-r" in argv)
 VERBOSE = "--verbose" in argv or "-v" in argv
 
 # colors
-c_orange = "\033[93m"
-c_cyan = "\033[36m"
-c_green = "\033[92m"
-c_blue = "\033[94m"
-c_magenta = "\033[95m"
-c_default = "\033[39m"
+C_ORANGE = "\033[93m"
+C_CYAN = "\033[36m"
+C_GREEN = "\033[92m"
+C_BLUE = "\033[94m"
+C_MAGENTA = "\033[95m"
+C_GRAY = "\033[90m"
+C_RESET = "\033[39m"
 
-# takes raw data, and attempts to make it standardized.
-# Data should be split with one component per key (and monitor amount pre-computed)
-# this methods DOES NOT ALTER THE BASE COLLECTION, but it does clone it, thus sadly increasing memory footprint
-# NOTE : this method works for fast fetch only
-# TODO : move this to modulated implementations
-def standardizeData(rawData: dict) -> dict:
-    data = rawData.copy()
-    for rawKey in rawData.keys():
-        value = str(rawData[rawKey])
-        key = rawKey.lower()
+class HardwareConfig:
+    # LOCATIONS
+    CONFIG_DIR_NAME="desktops"
+    GENERAL_CONFIG_DIR=f"/etc/{ROOT_DIR_NAME}/{HARDWARE_CONFIG_DIR}"
+    USER_CONFIG_DIR=path.expanduser(f"~/.config/{CONFIG_DIR_NAME}/{HARDWARE_CONFIG_DIR_NAME}")
+    # FILE IDENTIFIERS
+    class FileName:
+        COMPONENTS = "components.yml"
+        SCRIPT_ROOT = "root-launch.sh"
+        SCRIPT_USER = "user-launch.sh"
 
-        if key == memoryIdentifier and "/" in value and "(" in value:
-            value = value[value.find("/")+2:value.find("(")-1]
-        elif key == cpuIdentifier and "@" in value:
-            value = value[0:value.find("@")-1]
-            
-        data[key] = value
-    return data
+    def get_user_config_dir(self) -> str:
+        return f"{HardwareConfig.USER_CONFIG_DIR}/{self.name}"
 
+    def get_general_config_dir(self) -> str:
+        return f"{HARDWARE_CONFIG_DIR}/{self.name}"
 
-def trimConfigName(configPath:str) -> str:
-    trimmed = str(configPath)
-    if f"/{configFormat}" in trimmed.lower():
-        trimmed = trimmed[0:trimmed.rfind(f"/{configFormat}")]
-    if "/" in trimmed:
-        trimmed = trimmed[trimmed.rfind("/")+1:len(trimmed)]
+    def get_component_file(self) -> str:
+        return f"{self.get_general_config_dir()}/{HardwareConfig.FileName.COMPONENTS}"
 
-    return trimmed
+    def _get_file(self, filepath:str, identifier:str) -> str:
+        if path.isdir(filepath):
+            for file in os.listdir(filepath):
+                if file == identifier:
+                    return f"{filepath}/{file}"
+        return None
 
-def printVerbose(text: str):
-    if VERBOSE: print(text)
+    def _load_user_scripts(self) -> set:
+        conf=set()
+        gen_script = self._get_file(self.get_general_config_dir(), HardwareConfig.FileName.SCRIPT_USER)
+        usr_script = self._get_file(self.get_user_config_dir(), HardwareConfig.FileName.SCRIPT_USER)
+        if not gen_script is None:
+            conf.add(gen_script)
+        if not usr_script is None:
+            conf.add(usr_script)
+        return conf
 
-def writeConfig(config_dir: str):
-    if not WRITE_CONFIG: 
-        printVerbose("read only mode, config will not be written to disk")
-        return
-    baseDir = config_dir if (path.isdir(config_dir) or not path.exists(config_dir)) else path.dirname(config_dir)
-    if not path.isdir(baseDir): os.makedirs(baseDir)
+    def _load_root_scripts(self) -> set:
+        conf=set()
+        gen_script = self._get_file(self.get_general_config_dir(), HardwareConfig.FileName.SCRIPT_ROOT)
+        if not gen_script is None:
+            conf.add(gen_script)
+        return conf
 
-    configName = trimConfigName(baseDir)
+    @staticmethod
+    def standardize_data(comps: dict) -> dict:
+        data = {}
+        for k,v in comps.items():
+            key = k.lower()
+            if key == "memory" and "/" in v and "(" in v:
+                data[key] = v[v.find("/")+2:v.find("(")-1]
+            elif key == "cpu" and "@" in v:
+                data[key] = v[0:v.find("@")-1]
+            else:
+                data[key] = v
+        return data
 
-    try:
-        with open(currentUsedConfig, "w") as current:
-            current.write(f"{configName}\n{baseDir}\n")
-            os.chmod(current.name, stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH |  stat.S_IWOTH | stat.S_IRGRP | stat.S_IWGRP)
-    except PermissionError as p:
-        print(f"[!] Could not write config to disk, permission denied!")
+    @staticmethod
+    def deserialize_components(filepath:str) -> dict:
+        try:
+            with open(filepath, "r", encoding=ENCODING) as inputstream:
+                return HardwareConfig.standardize_data(yaml.safe_load(inputstream))
+        except Exception as excp:
+            raise FileNotFoundError(f"config does not exist at {filepath}") from excp
 
+    def _load_components(self) -> dict:
+        return HardwareConfig.deserialize_components(self.get_component_file())
 
-def loadComponents(components: list) -> dict:
+    def load_scripts(self):
+        self.user_scripts = self._load_user_scripts()
+        self.root_scripts = self._load_root_scripts()
+        self.are_scripts_loaded=True
+
+    def exists(self) -> bool:
+        return path.isfile(self.get_component_file())
+
+    def __init__(self, name:str, load_scripts=True):
+        self.name = name
+        self.user_scripts = set()
+        self.root_scripts = set()
+        self.are_scripts_loaded=False
+        if load_scripts:
+            self.load_scripts()
+        try:
+            self.components = self._load_components()
+        except Exception as _:
+            self.components = {}
+
+    def match(self, component_list:dict, exact_match=False) -> int:
+        """
+        returns the number of matching fields (so that a general config may be applied if all other fail and exact match is set to false)
+        """
+        if component_list is None or len(component_list) == 0:
+            return 0
+        matching = 0
+        if exact_match and self.components == component_list:
+            return len(component_list)
+
+        # if exactMatch is not specified, it will attempt to find the closest config it can find
+        for k,v in component_list.items():
+            if k in self.components and str(v).lower() == str(self.components[k]).lower():
+                matching += 1
+
+        return matching
+
+def print_verbose(text: str, verbose=True):
+    if verbose:
+        print(text)
+
+def get_current_config() -> HardwareConfig:
+    if not path.isfile(CURRENT_CONFIG_FILE):
+        raise FileNotFoundError("Current config is not set yet.")
+    conf_name = "gnbergnf"
+    with open(CURRENT_CONFIG_FILE, "r", encoding=ENCODING) as file_input:
+        file_input.seek(0)
+        conf_name = file_input.readline().strip()
+    conf = HardwareConfig(conf_name)
+    if conf.exists():
+        return conf
+    return None
+
+def set_current_config(config:HardwareConfig):
+    if not config.exists():
+        raise FileNotFoundError("Cannot set a non-existing config as the currently used one.")
+    with open(CURRENT_CONFIG_FILE, "w", encoding=ENCODING) as file_output:
+        file_output.write(f"{config.name}\n")
+        try:
+            os.chmod(CURRENT_CONFIG_FILE, stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH |  stat.S_IWOTH | stat.S_IRGRP | stat.S_IWGRP)
+        except PermissionError:
+            print("Config set but file permissions were not allowed to be modified.")
+
+def fetch_components(components: list) -> dict:
     output = ""
-    componentStr = ""
-    for c in components:
-        componentStr += f"{c}:"
-    componentStr = componentStr[0:len(componentStr)-1]
-    
+    component_str = ":".join(components)
+    args = [
+                "fastfetch",
+                "--pipe",
+                "-s",
+                component_str,
+                "--multithreading"
+            ]
     try:
-        output = subprocess.check_output(f"fastfetch --pipe -s {componentStr} --multithreading", shell=True).decode("UTF-8")
-    except subprocess.CalledProcessError :
+        output = subprocess.check_output(
+            " ".join(args),
+            shell=True
+            ).decode(ENCODING)
+    except subprocess.CalledProcessError as er:
         print("an error occured when fetching the data !")
         print("no config found")
-        writeConfig(unknownConfig)
-        
+        set_current_config(HardwareConfig(UNKNOWN_CONFIG_NAME,load_scripts=False))
+        raise er
+
     fetched = output.strip().splitlines()
 
-    dataMap = {}
-    monitorAmount = 0
-
+    datamap = {}
+    monitor_amount = 0
     for entry in fetched :
-        if entry.startswith(displayIdentifier):
+        if entry.startswith("Display"):
             # do not count monitors with a height smaller than 1080 pixels (to avoid detecting fake monitors)
-            if(int(entry.split("x")[1][0:4]) < 1080):
+            # WARNING: THIS COULD LEAD TO UNWANTED BEHAVIOURS !
+            height = int(entry[entry.rfind("x")+1:entry.rfind("@")-1])
+            if height < 1080:
                 continue
-            monitorAmount+=1
+            monitor_amount+=1
         else:
             duo = entry.split(":")
-            key = str(duo[0])
             data = duo[1].strip()
-                
-            dataMap[str(duo[0]).lower()] = data
-    if displayIdentifier in components:
-        dataMap["monitors"] = monitorAmount
 
-    return standardizeData(dataMap)
+            datamap[str(duo[0]).lower()] = data
+    if "Display" in components:
+        datamap["monitors"] = str(monitor_amount)
 
+    return HardwareConfig.standardize_data(datamap)
 
-def matchConfig(config: str, dataMap: dict, exactMatch=False) -> int:
+def load_configs() -> list:
     """
-    returns the number of matching fields (so that a general config may be applied if all other fail and exact match is set to false)
+    Returns a list of found configs in the general config directory.
+    The configs scripts are not loaded when generated by this method!
+    (/etc/desktops/hardware)
     """
-    if (not path.isfile(config)) or dataMap == None or len(dataMap) == 0: return 0
-    matching = 0
-    try:
-        with open(config) as configRawData :
-            data = standardizeData(yaml.safe_load(configRawData))
-
-            if exactMatch and data == dataMap: return len(dataMap)
-
-            # if exactMatch is not specified, it will attempt to find the closest config it can find
-            for field in data.keys() :
-                if field in dataMap and data[field].lower() == dataMap[field].lower(): 
-                    matching += 1
-    except e as PermissionError:
-        print(f"Config {config} could not be loaded due to unsufficient permissions")
-
-    return matching
+    user_configs = []
+    if os.path.isdir(HARDWARE_CONFIG_DIR):
+        identifier = HardwareConfig.FileName.COMPONENTS
+        for base, _, files in os.walk(HARDWARE_CONFIG_DIR):
+            if identifier in files:
+                config_name = base[base.rfind("/")+1:]
+                hw_config = HardwareConfig(config_name,load_scripts=False)
+                user_configs.append(hw_config)
+    return user_configs
 
 
+def full_detect(exact_match=False, verbose=False) -> HardwareConfig:
+    start_time = time()
+    fetch_content = fetch_components(FULL_FETCH_CONTENT)
+    if verbose:
+        fetch_time = round((time()-start_time)*1000)
+        print_verbose(f"fetching took {fetch_time}ms")
+    data_size = len(fetch_content)
 
-def loadConfigs() -> set:
-    """
-    returns a dict containing the paths to the configs found. It loads the configs found in the users home directory
-    and the ones defines in TODO config.yml
-    """
-    userConfigs = set()
-    homeDir = "/home"
-    if not path.isdir(homeDir): return userConfigs
-    for user in glob.glob(root_dir=homeDir,recursive=False,pathname="*/"):
-        configRoot = f"{homeDir}/{user}{userConfigLocation}"
-        if not (path.isdir(configRoot)) : continue
-        for configName in glob.glob(root_dir=configRoot, pathname=f"*/{configFormat}", recursive=True):
-            userConfigs.add(f"{configRoot}/{configName}")
+    found_configs = load_configs()
+    print_verbose(f"found {len(found_configs)} hardware configs",verbose)
+    match_map = {}
 
-    for rootpath in hardwareLocations :
-        for config in glob.glob(root_dir=rootpath, recursive=True, pathname=f"*/{configFormat}"):
-                userConfigs.add(f"{rootpath}/{config}")
-    
-    return userConfigs
+    for conf in found_configs:
+        match_map[conf] = conf.match(fetch_content,exact_match)
 
+    sorted_matches = sorted(match_map.items(), key=lambda k:k[1], reverse=True)
 
-def detect() -> str:
-    
-    startTime = time()
-    dataMap = loadComponents(fetchComponents)
-    if VERBOSE:
-        fetchTime = round((time()-startTime)*1000)
-        printVerbose(f"fetching took {fetchTime}ms")
-    dataSize = len(dataMap)
-    #printVerbose(f"hardware: {dataMap}")
+    if not (len(sorted_matches) == 0 or (exact_match and sorted_matches[0][1] != data_size)):
+        best_match = sorted_matches[0]
+        found_config = best_match[0]
+        if exact_match:
+            print_verbose("exact match mode specified",verbose)
+        if best_match[1] == data_size:
+            print_verbose(f"config [{found_config.name}] exactly matched !",verbose)
+            return found_config
+        if not exact_match:
+            print_verbose(f"found config [{found_config.name}] with {best_match[1]}/{data_size} matches",verbose)
+            return found_config
 
-    foundConfigs = loadConfigs()
-    printVerbose(f"found {len(foundConfigs)} hardware configs")
-    matchMap = {}
+    if verbose:
+        total_time = round((time()-start_time)*1000)
+        print_verbose(f"config matching done in {total_time-fetch_time}ms")
+        print_verbose(f"complete config detection done in {total_time}ms")
 
-    for configPath in foundConfigs:
-        matchMap[configPath] = matchConfig(config=configPath, dataMap=dataMap, exactMatch=EXACT_MATCH)
-    
-    configPath = unknownConfig
+    return HardwareConfig(UNKNOWN_CONFIG_NAME,load_scripts=False)
 
-    sortedMatches = sorted(matchMap.items(), key=lambda k:k[1], reverse=True)
+def partial_detect(verbose=False) -> HardwareConfig:
+    found_configs = load_configs()
+    print_verbose(f"found {len(found_configs)} hardware configs")
 
-    if not (len(sortedMatches) == 0 or (EXACT_MATCH and sortedMatches[0][1] != dataSize)):
-        bestMatch = sortedMatches[0]
-        configPath = path.dirname(bestMatch[0])
-        config = trimConfigName(configPath)
-        if EXACT_MATCH:
-            printVerbose("exact match mode specified")
-        if bestMatch[1] == dataSize:
-            printVerbose(f"config [{config}] exactly matched !")
-        elif not EXACT_MATCH:
-            printVerbose(f"found config [{config}] with {bestMatch[1]}/{dataSize} matches")
-            
-    if VERBOSE:
-        totalTime = round((time()-startTime)*1000)
-        printVerbose(f"config matching done in {totalTime-fetchTime}ms")
-        printVerbose(f"complete config detection done in {totalTime}ms")
+    if verbose:
+        start_time = time()
+    fetch_content = fetch_components(PARTIAL_FETCH_CONTENT)
+    if verbose:
+        print_verbose(f"initial fetch done in {round((time()-start_time)*1000)}ms")
 
-    return configPath
+    unused_components = [""]
 
-def partialDetect() -> str:
-    if EXACT_MATCH: 
-        detect()
-        return
+    for c in FULL_FETCH_CONTENT:
+        if not c in PARTIAL_FETCH_CONTENT:
+            unused_components.append(c)
 
-    foundConfigs = loadConfigs()
-    printVerbose(f"found {len(foundConfigs)} hardware configs")
+    refetch_amount = 0
+    conf = HardwareConfig(UNKNOWN_CONFIG_NAME,load_scripts=False)
 
-    if VERBOSE: startTime = time()
-    dataMap = loadComponents(partialFetchComponents)
-    if VERBOSE: printVerbose(f"initial fetch done in {round((time()-startTime)*1000)}ms")
+    for i in unused_components:
+        if len(i) > 0:
+            fetch_content.update(fetch_components([i]))
+            refetch_amount += 1
 
-    unusedComponents = [""]
-
-    for c in fetchComponents:
-        if not c in partialFetchComponents: unusedComponents.append(c)
-
-    refetchAmount = 0
-    config = unknownConfig
-    
-    for i in unusedComponents:
-        if len(i) > 0: 
-            dataMap.update(loadComponents({i}))
-            refetchAmount += 1
-        
-        matchMap = {}  
-        for configPath in foundConfigs:
-            matchMap[configPath] = matchConfig(config=configPath, dataMap=dataMap, exactMatch=EXACT_MATCH)
-        maxMatches = max(matchMap.values())
+        matchmap = {}
+        for conf in found_configs:
+            matchmap[conf] = conf.match(fetch_content,False)
+        max_matches = max(matchmap.values()) if len(matchmap) > 0 else 0
 
         matching = []
-        for k,v in matchMap.items():
-            if v == maxMatches : matching.append(k)
+        for k,v in matchmap.items():
+            if v == max_matches :
+                matching.append(k)
 
         if len(matching) <= 1:
             if len(matching) == 0:
-                printVerbose("No config found! Using unknown_config instead.")
+                print_verbose("No config found.")
             else:
                 # partial match case
-                config = matching[0]
-                printVerbose(f"found config [{trimConfigName(config)}] with {matchMap[config]} matches")
+                best_match = matching[0]
+                print_verbose(f"found config [{best_match.name}] with {matchmap[best_match]} matches")
             break
 
     if VERBOSE:
-        totalTime = round((time()-startTime)*1000)
-        printVerbose(f"config matching done with {refetchAmount} additionnal fetch{'es' if refetchAmount > 1 else ''}")
-        printVerbose(f"complete config detection done in {totalTime}ms")
+        total_time = round((time()-start_time)*1000)
+        print_verbose(f"config matching done with {refetch_amount} additionnal fetch{'es' if refetch_amount > 1 else ''}")
+        print_verbose(f"complete config detection done in {total_time}ms")
 
-    return config
+    return HardwareConfig(UNKNOWN_CONFIG_NAME,load_scripts=False)
 
-def getStartupScripts(configDir: str, identifier: str) -> list:
-    dirPath = configDir if path.isdir(configDir) else path.dirname(configDir)
-    configs = []
-    if not path.isdir(dirPath): return configs
 
-    if dirPath[len(dirPath)-1] == '/': dirPath = dirPath[0:len(dirPath)-2]
-    genConfigFile = f"{dirPath}/{identifier}"
-    if path.isfile(genConfigFile) :
-        configs.append(genConfigFile)
-
-    if identifier == userScriptIdentifier:
-        userConfig = path.expanduser(f"$HOME/.config/desktops/{computers}/{trimConfigName(configDir)}/{userScriptIdentifier}")
-        if path.isfile(userConfig):
-            configs.append(userConfig)
-            
-    return configs
-    
-
-def apply():
+def apply(current_config:HardwareConfig, passed_arguments="", is_root=False):
     # the config will be applied as the current user. For any operation requiring root privileges please edit /etc/sddm/Xsetup.
-    passedArgument = ""
-    for typeArg in argv:
-        if typeArg.startswith("--type=") or typeArg.startswith("-t="):
-            passedArgument = typeArg[typeArg.index('=')+1:len(typeArg)]
-            break
-        
-    config = None
-    scripts = [None]*2
 
-    isRoot = "--root" in argv or "-r" in argv
-
-    def checkSure():
+    def ask_validation():
         sure = input("Are you sure this is what you want to do ? (y/N): ").lower() in ["y","yes"]
         if not sure:
             print("User cancelation, aborting sequence.")
-            exit()
+            return
 
-    if isRoot and os.geteuid() != 0:
+    if is_root and os.geteuid() != 0:
         print("Applying root config as a non-root user, this is not an intended usage.")
-        checkSure()
-    elif (not isRoot) and os.geteuid() == 0:
+        ask_validation()
+    elif (not is_root) and os.geteuid() == 0:
         print("Root user detected, automatically switching to root mode (--root)")
-        isRoot = True
+        is_root = True
 
-    if isRoot:
+    if is_root:
         print("applying root startup scripts")
     else:
         print(f"applying user startup scripts for user [{os.getlogin()}]")
 
     # general config launch script
-    configDir = None
-    if not path.isfile(currentUsedConfig):
-        print("Current used config file not found, please do a config detection first!")
-    try:
-        with open(currentUsedConfig, "r") as current:
-            lines = current.readlines()
-            config = lines[0].strip()
-            configPath = lines[1].strip()
-            configDir = configPath if path.isdir(configPath) else path.dirname(configPath)
-    except:
-        print(f"Access to current config in {currentUsedConfig} refused: Unsufficient permission")
-        exit()
-    
-    if config == None or len(config) == 0:
-            print("No config found!")
-            exit(1)
+
+    if current_config is None or not current_config.exists():
+        raise FileNotFoundError("No config found!")
 
     # user-specific launch script
-    scripts = getStartupScripts(configDir, rootScriptIdentifier if isRoot else userScriptIdentifier)
-    successfulScripts = 0
+    successful_scripts = 0
+    failed_scripts = 0
 
-    for s in scripts:
+    if is_root:
+        for s in current_config.root_scripts:
+            try:
+                if not s is None and len(s) > 0:
+                    system(f"{s} {passed_arguments}")
+                    successful_scripts += 1
+            except Exception:
+                print(f"Failed to run {s} !")
+                failed_scripts += 1
+    else:
+        for s in current_config.user_scripts:
+            try:
+                if not s is None and len(s) > 0:
+                    system(f"{s} {passed_arguments}")
+                    successful_scripts += 1
+            except Exception:
+                print(f"Permissions to run {s} denied !")
+                if is_root:
+                    print("Please run this program with root privileges when using --root or -r !")
+                failed_scripts += 1
         try:
-            if not s == None and not len(s) == 0: 
-                system(f"{s} {passedArgument}")
-                successfulScripts += 1
-        except:
-            print(f"Permissions to run {s} denied !")
-            if isRoot:
-                print("Please run this program with root privileges when using --root or -r !")
-
-    if not isRoot:
-        try:
-            system(f"notify-send \"Desktops\" \"Config [{config}] {'applied' if successfulScripts > 0 else 'FAILED TO BE APPLIED'} !\"")
-        except:
+            subprocess.call(
+                [
+                    "notify-send",
+                    "Desktops",
+                    f"Config [{current_config.name}] {'applied' if successful_scripts > 0 else 'FAILED TO BE APPLIED'} !"
+                ]
+            )
+        except Exception:
             print("notification could not be sent! THIS IS NOT AN ERROR BUT A BAD IMPLEMENTATION")
-    print(f"Launch script execution done ({successfulScripts}/{len(scripts)})")
+    print(f"Launch script execution done ({successful_scripts}/{successful_scripts+failed_scripts})")
 
 def benchmark():
-    compSet = fetchComponents
-    components = loadComponents(compSet)
-    configs = loadConfigs()
-    fetchTimes = {}
-    fetchResult = {}
-    print(f"Split fetch timings:")
-    for identifier in compSet:
-        baseTime = time()
+    comp_set = FULL_FETCH_CONTENT
+    fetch_components(comp_set)
+    load_configs()
+    fetch_times = {}
+    fetch_result = {}
+    print("Split fetch timings:")
+    for identifier in comp_set:
+        base_time = time()
         try:
-            output = subprocess.check_output(f"fastfetch --pipe -s {identifier} --multithreading", shell=True).decode("UTF-8")
-            fetchTimes[identifier] = round((time()-baseTime)*1000)
-            fetchResult[identifier] = output
+            output = subprocess.check_output(f"fastfetch --pipe -s {identifier} --multithreading", shell=True).decode(ENCODING)
+            fetch_times[identifier] = round((time()-base_time)*1000)
+            fetch_result[identifier] = output
         except subprocess.CalledProcessError:
             print("an error occured when fetching the data !")
 
-    totalTime = sum(fetchTimes.values())
-    for k,v in sorted(fetchTimes.items(), key=lambda k:k[1], reverse=False):
-        print(f"    - fetched {k} in {v}ms ({round(100*v/totalTime)}%)")
-    print(f"{c_green}==> all fetches took {c_cyan}{totalTime}ms{c_green} in total{c_default}")
-    print(f"{c_blue}\nStarting merged fetch benchmark...{c_default}")
-    startTime = time()
-    mergedList = loadComponents(fetchComponents)
-    mergedFetchTime = round((time()-startTime)*1000)
-    print(f"{c_green}==> merged fetch took {c_cyan}{mergedFetchTime}ms{c_default}")
-    
-    print(f"\nHardware: {mergedList}")
+    total_time = sum(fetch_times.values())
+    for k,v in sorted(fetch_times.items(), key=lambda k:k[1], reverse=False):
+        print(f"    - fetched {k} in {v}ms ({round(100*v/total_time)}%)")
+    print(f"{C_GREEN}==> all fetches took {C_CYAN}{total_time}ms{C_GREEN} in total{C_RESET}")
+    print(f"{C_BLUE}\nStarting merged fetch benchmark...{C_RESET}")
+    start_time = time()
+    merged_list = fetch_components(FULL_FETCH_CONTENT)
+    merged_fetch_time = round((time()-start_time)*1000)
+    print(f"{C_GREEN}==> merged fetch took {C_CYAN}{merged_fetch_time}ms{C_RESET}")
 
-def test(benchmarkFetch = True, listConfigs = True, listScripts = True):
+    print("\nHardware: ")
+    for category, comp in merged_list.items():
+        print(f"    - {category} : {comp}")
 
-    hardware = loadComponents(fetchComponents)
-    current = detect()+"/"+configFormat
+def test(benchmark_fetch = True, list_configs = True, list_scripts = True):
 
-    if benchmarkFetch: 
-        print(f"{c_blue}Starting benchmarking sequence...{c_default}")
+    hardware = fetch_components(FULL_FETCH_CONTENT)
+    current = get_current_config()
+
+    if benchmark_fetch:
+        print(f"{C_BLUE}Starting benchmarking sequence...{C_RESET}")
         benchmark()
-        
-    if listConfigs: 
-        print(f"{c_blue}\nListing hardware configs...{c_default}")
+
+    if list_configs:
+        print(f"{C_BLUE}\nListing hardware configs...{C_RESET}")
         configs = {}
 
-        for c in loadConfigs():
-            configs[c] = matchConfig(c,hardware)
-        
-        for c in sorted(configs.items(), key=lambda k:k[1], reverse=True):
-            c1 = c_default
-            c2 = c_default
-            if c[0] == current:
-                c1 = c_magenta
-                c2 = c_orange
-            print(f"    {c1}- {c2}{trimConfigName(c[0])}{c1}: {c[0]}")
-            print(f"      {c2}matches: {c[1]}/{len(hardware)}{c_default}")
-        print(f"{c_green}==> {c_cyan}{len(configs)} config{'s' if len(configs) > 1 else ''}{c_green} found{c_default}")
-        
-        print(f"{c_blue}\nStarting detection benchmark...{c_default}")
-        startTime = time()
-        detect()
-        finalTime = round((time()-startTime)*1000)
-        print(f"{c_green}==> normal detection took {c_cyan}{finalTime}ms{c_default}\n")
-        startTime = time()
-        partialDetect()
-        finalTime = round((time()-startTime)*1000)
-        print(f"{c_green}==> partial detection took {c_cyan}{finalTime}ms{c_default}")
-            
-    if listScripts: 
-        print(f"{c_blue}\nListing startup scripts...{c_default}")
-        if len(configs) == 0: configs = loadConfigs()
+        for c in load_configs():
+            configs[c] = c.match(hardware,exact_match=False)
 
-        isRoot = os.geteuid() == 0
-        
+        for conf, matches in sorted(configs.items(), key=lambda k:k[1], reverse=True):
+            c1 = C_RESET
+            c2 = C_RESET
+            if conf.name == current.name:
+                c1 = C_MAGENTA
+                c2 = C_ORANGE
+            elif matches < 1:
+                c1 = C_GRAY
+                c2 = C_GRAY
+            print(f"    {c1}- {c2}{conf.name}{c1}: {conf.get_component_file()}")
+            print(f"      {c2}matches: {matches}/{len(hardware)}{C_RESET}")
+        print(f"{C_GREEN}==> {C_CYAN}{len(configs)} config{'s' if len(configs) > 1 else ''}{C_GREEN} found{C_RESET}")
+
+        print(f"{C_BLUE}\nStarting detection benchmark...{C_RESET}")
+        start_time = time()
+        full_detect()
+        final_time = round((time()-start_time)*1000)
+        print(f"{C_GREEN}==> normal detection took {C_CYAN}{final_time}ms{C_RESET}\n")
+        start_time = time()
+        partial_detect()
+        final_time = round((time()-start_time)*1000)
+        print(f"{C_GREEN}==> partial detection took {C_CYAN}{final_time}ms{C_RESET}")
+
+    if list_scripts:
+        print(f"{C_BLUE}\nListing startup scripts...{C_RESET}")
+        if len(configs) == 0:
+            configs = load_configs()
+
+        is_root = os.geteuid() == 0
+
         for c in configs:
-            c1 = c_default
-            c2 = c_default
-            isCurrent = c == current
-            
-            if isCurrent:
-                c1 = c_magenta
-                c2 = c_orange
-                
-            print(c_default)
-            print(f"    {c1}[{c2}{trimConfigName(c)}{c1}]:")
-            print(f"      {c2 if isRoot else c1}root{c1}:")
-            for sc in getStartupScripts(c, rootScriptIdentifier):
-                print(f"        0. {sc}")
-            print(f"      {c2 if not isRoot else c1}user{c1}:")
-            for sc in enumerate(getStartupScripts(c, userScriptIdentifier)):
-                print(f"        {sc[0]+1}. {sc[1]}")
+            c.load_scripts()
+            c1 = C_RESET
+            c2 = C_RESET
+            is_current = c.name == current.name
+
+            if is_current:
+                c1 = C_MAGENTA
+                c2 = C_ORANGE
+
+            print(C_RESET)
+            print(f"    {c1}[{c2}{c.name}{c1}]:")
+            print(f"      {c2 if is_root else c1}root{c1}:")
+            for index, sc in enumerate(c.root_scripts):
+                print(f"        {index}. {sc}")
+            print(f"      {c2 if not is_root else c1}user{c1}:")
+            for index, sc in enumerate(c.user_scripts):
+                print(f"        {index}. {sc}")
 
 
-def create(name:str):
-    dataMap = loadComponents(fetchComponents)
-    configPath = f"{defaultHardwareLocation}/{name}"
-    if path.exists(configPath):
-        print(f"Config [{name}] already exists!\nAborting creation")
-        exit()
-        
+def create(config_name:str):
+    datamap = fetch_components(FULL_FETCH_CONTENT)
+    config_path = f"{HARDWARE_CONFIG_DIR}/{config_name}"
+    if path.exists(config_path):
+        print(f"Config [{config_name}] already exists!\nAborting creation")
+        return
+
     try:
-        os.makedirs(configPath)
+        os.makedirs(config_path)
     except Exception as e:
         print(f"Config directory creation failed, aborting operation ({repr(e)})")
-        exit()
+        return
 
-    print(f"config will be created at {configPath}/")
-    print(f"this hardware will be used for config:")
-    for k in dataMap:
-        print(f"    - {k}: {dataMap[k]}")
+    print(f"config will be created at {config_path}/")
+    print("this hardware will be used for config:")
+    for k,v in datamap.items():
+        print(f"    - {k}: {v}")
     # write config
     try:
-        with open(f"{configPath}/{configFormat}", "w") as targetFile:
-            yaml.safe_dump(data=dataMap,stream=targetFile)
-        with open(f"{configPath}/{rootScriptIdentifier}", "w") as targetFile:
-            targetFile.write("# root startup script goes here")
-            os.chmod(targetFile.name, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH | stat.S_IRGRP)
-        with open(f"{configPath}/{userScriptIdentifier}", "w") as targetFile:
-            targetFile.write("# user startup script goes here")
-            os.chmod(targetFile.name, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH | stat.S_IRGRP)
+        with open(f"{config_path}/{HardwareConfig.FileName.COMPONENTS}", "w", encoding=ENCODING) as target_file:
+            yaml.safe_dump(data=datamap,stream=target_file)
+        with open(f"{config_path}/{HardwareConfig.FileName.SCRIPT_ROOT}", "w", encoding=ENCODING) as target_file:
+            target_file.write("# root startup script goes here")
+            os.chmod(target_file.name, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH | stat.S_IRGRP)
+        with open(f"{config_path}/{HardwareConfig.FileName.SCRIPT_USER}", "w", encoding=ENCODING) as target_file:
+            target_file.write("# user startup script goes here")
+            os.chmod(target_file.name, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR |  stat.S_IROTH | stat.S_IRGRP)
     except Exception as e:
         print(f"Config file creation failed, aborting operation ({repr(e)})")
         try:
-            shutil.rmtree(configPath)
-        except:
+            shutil.rmtree(config_path)
+        except Exception:
             print("Config cleanup failed")
-
-
 
 ##################################################
 #                                                #
@@ -589,77 +586,89 @@ def create(name:str):
 #                                                #
 ##################################################
 
-try:
-    hardwareLocations.append(f"{path.dirname(argv[0])}/{computers}")
-except:
-    print("Current directory not usable for hardware detection")
+def main(args:list) -> int:
 
-if len(argv) < 2:
-    print("""
-    Please specify an action.
+    if len(args) < 1 or args[0].startswith("-"):
+        help_message = RunMode.help_messages.get(args[0] if len(args) > 1 else "","")
+        print(help_message)
+        return 1
 
-    Possible actions are :
-        detect
-        apply
-        create
-        test""")
-    exit()
+    mode = args[0]
 
-if mode ==  detectMode:
-        try:
-            subprocess.run("fastfetch -v", shell=True, capture_output=True, check=True)
-        except subprocess.CalledProcessError:
-            print("ERROR : fastfetch not found! please ensure fastfetch is present and available.\nAborting detection!")
-            exit()
-        
-        print("Detecting hardware configuration...")
-        config = None
-        if PARTIAL_FETCH:
-            printVerbose("using partial detection")
-            config = partialDetect()
-        else:
-            config = detect()
-        
-        if config == None:
-            print("No config found! Using unknown_config instead.")
-            config = unknownConfig
+    match(mode):
+        case RunMode.DETECT:
+            try:
+                subprocess.run("fastfetch -v", shell=True, capture_output=True, check=True)
+            except subprocess.CalledProcessError:
+                print("ERROR : fastfetch not found! please ensure fastfetch is present and available.\nAborting detection!")
+                os.sys.exit()
+            print("Detecting hardware configuration...")
+            found_config = None
+            if PARTIAL_FETCH:
+                print_verbose("using partial detection")
+                found_config = partial_detect()
+            else:
+                found_config = full_detect()
+            if found_config is None:
+                print("No config found! Using unknown_config instead.")
+                found_config = HardwareConfig(UNKNOWN_CONFIG_NAME,load_scripts=False)
+            print(f"using config [{found_config.name}]")
+            set_current_config(found_config)
 
-        print(f"using config [{trimConfigName(config)}]")
-        writeConfig(config)
+        case RunMode.TEST:
+            if len(args) == 1:
+                test()
+            else:
+                test(
+                    benchmark_fetch = "--benchmark" in args or "-b" in args,
+                    list_configs = "--configs" in args or "-c" in args,
+                    list_scripts = "--scripts" in args or "-s" in args,
+                )
 
-elif mode ==  testMode:
-        VERBOSE = True
-        if len(argv) == 2 : test()
-        else:
-            test(
-                benchmarkFetch = "--benchmark" in argv or "-b" in argv,
-                listConfigs = "--configs" in argv or "-c" in argv,
-                listScripts = "--scripts" in argv or "-s" in argv,
-            )
+        case RunMode.APPLY:
+            try:
+                current_config = get_current_config()
+            except FileNotFoundError:
+                main([RunMode.DETECT])
+                try:
+                    current_config = get_current_config()
+                    if not current_config.exists():
+                        print("Config detection failed, please try again as root!")
+                        return 1
+                except Exception:
+                    print("Config detection failed, please try again as root!")
+                    return 1
+            except PermissionError:
+                print(f"Not enough permissions to access latest config. Please grant read/write permission for the file {CURRENT_CONFIG_FILE}")
+            print("Launching startup scripts...")
+            passed_arguments = " ".join(args[1:len(args)])
+            for t in args[1:len(args)]:
+                if t.startswith("--type=") or t.startswith("-t="):
+                    passed_arguments = t[t.find("=")+1:]
+                    break
 
-elif mode == applyMode:
+            is_root = "--root" in args or "-r" in args
+            apply(current_config,passed_arguments=passed_arguments,is_root=is_root)
 
-        if not path.isfile(currentUsedConfig):
-            subprocess.run(f"/bin/env python3 {argv[0]} detect")
-            if not path.isfile(currentUsedConfig):
-                print("Config detection failed, please try again as root!")
-                exit()
-            
-        print("Launching startup script...")
-        apply()
+        case RunMode.CREATE:
+            name = ""
+            for a in argv:
+                if a.startswith("--name=") or a.startswith("-n="):
+                    name = a[a.index("=")+1:len(a)]
+                    break
+            if len(name) < 1 and len(argv) >= 3 and len(argv[2]) > 0 and not argv[2].startswith("-"):
+                name = argv[2]
+            if len(name) > 0:
+                print(f"Creating config [{name}]...")
+                create(name)
+                print("Config creation done!")
+            else:
+                print("Please input a name for the config, either using --name=<name> or by putting it as the argument after \"create\"")
+        case _:
+            print(RunMode.help_messages[""])
+            return 1
 
-elif mode == createMode:
-        name = ""
-        for a in argv:
-            if a.startswith("--name=") or a.startswith("-n="):
-                name = a[a.index("=")+1:len(a)]
-                break
-        if len(name) < 1 and len(argv) >= 3 and len(argv[2]) > 0 and not argv[2].startswith("-"):
-            name = argv[2]
-        if len(name) > 0:
-            print(f"Creating config [{name}]...")
-            create(name)
-            print("Config creation done!")
-        else:
-            print("Please input a name for the config, either using --name=<name> or by putting it as the argument after \"create\"")
-exit()
+
+if __name__ == "__main__":
+    EXIT_CODE = main(os.sys.argv[1:len(argv)])
+    os.sys.exit(EXIT_CODE)
