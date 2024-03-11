@@ -234,6 +234,8 @@ def get_current_config() -> HardwareConfig:
 def set_current_config(config:HardwareConfig):
     if not config.exists():
         raise FileNotFoundError("Cannot set a non-existing config as the currently used one.")
+    if not WRITE_CONFIG:
+        return
     with open(CURRENT_CONFIG_FILE, "w", encoding=ENCODING) as file_output:
         file_output.write(f"{config.name}\n")
         try:
@@ -588,7 +590,7 @@ def create(config_name:str):
 
 def main(args:list) -> int:
 
-    if len(args) < 1 or args[0].startswith("-"):
+    if len(args) < 1 or args[0].startswith("-") or (len(args) >= 2 and (args[1] == "--help" or args[1] == "-h")):
         help_message = RunMode.help_messages.get(args[0] if len(args) > 1 else "","")
         print(help_message)
         return 1
