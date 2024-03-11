@@ -1,3 +1,4 @@
 latest.log
 *.swp
-./hardware
+hardware/
+desktops_current
