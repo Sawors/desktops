@@ -90,7 +90,13 @@ HARDWARE_CONFIG_DIR = f"{ROOT_DIR}/{HARDWARE_CONFIG_DIR_NAME}"
 CURRENT_CONFIG_FILE = f"{ROOT_DIR}/desktops_current"
 UNKNOWN_CONFIG_NAME = "unknown_config"
 # ideally sorted in order, from quickest to slowest
-FULL_FETCH_CONTENT = ["Board","CPU","Memory","GPU","Display"]
+FULL_FETCH_CONTENT = [
+                        "Board",
+                        "CPU",
+                        "Memory",
+                        "GPU",
+                        "Display"
+                    ]
 # partial fetch initial content
 PARTIAL_FETCH_CONTENT = ["Board","CPU","Memory"]
 
@@ -316,8 +322,9 @@ def load_configs() -> list:
 def sort_config(config:HardwareConfig, match_result:int) -> float:
     """
     Returns a score to rank the configs from the least probable (0) to
-    the most probable (1).
+    the most probable (>=1).
     """
+    # TODO : make this cleaner and more predictable
     max_comp_amount = len(FULL_FETCH_CONTENT)
     config_comps = len(config.components)
     absolute_score = match_result/max(max_comp_amount,1)/2
