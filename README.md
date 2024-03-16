@@ -18,6 +18,8 @@ desktops apply
 
 >For more commands, run `desktops --help`
 
+---
+
 ## Hardware Configs
 Desktops is based on a **hardware config** system. Each combination of hardware you want to detect is defined in a `yaml` file named `components.yml`. These files will be loaded during the early detection of the hardware. 
 
@@ -42,6 +44,8 @@ hardware/
  
 The name of the directory the components are stored in is used as the name of the config.
 When the hardware detection is first run, it will attempt to read each `components.yml` file to determine the closest match of hardware (this description follows a specific structure, TODO : ADD WIKI LINK).
+
+---
 
 ## Startup scripts
 ### Root script
