@@ -204,7 +204,7 @@ class HardwareConfig:
             return len(component_list)
 
         matching = 0
-        
+
         for k,v in component_list.items():
             if k in self.components:
                 if str(v).lower() == str(self.components[k]).lower():
@@ -248,8 +248,6 @@ def get_current_config() -> HardwareConfig:
 def set_current_config(config:HardwareConfig):
     if not config.exists():
         raise FileNotFoundError("Cannot set a non-existing config as the currently used one.")
-    if not WRITE_CONFIG:
-        return
     with open(CURRENT_CONFIG_FILE, "w", encoding=ENCODING) as file_output:
         file_output.write(f"{config.name}\n")
         try:
@@ -357,7 +355,7 @@ def detect(verbose=False, exact_match=False) -> HardwareConfig:
         #for conf in found_configs:
         #    matchmap[conf] = sort_config(conf,conf.match(fetch_content))
         #max_matches = max(matchmap.values()) if len(matchmap) > 0 else 0
-        
+
         matching = get_sorted_config_list(found_configs,fetch_content)
         #for k,v in matchmap.items():
         #    if v == max_matches :
