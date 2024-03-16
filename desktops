@@ -26,7 +26,6 @@ This mode detects the current hardware used, compares it with the found hardare 
 
     optional args:
     -m, --exact-match  the config must exacly match the hardware, otherwise nothing is done
-    -p, --partial      fetch only an optimised section of the hardware
     -r, --no-write     do not write the found config to disk
     -v, --verbose      print additional runtime information
     """,
@@ -92,13 +91,10 @@ CURRENT_CONFIG_FILE = f"{ROOT_DIR}/desktops_current"
 UNKNOWN_CONFIG_NAME = "unknown_config"
 # ideally sorted in order, from quickest to slowest
 FULL_FETCH_CONTENT = ["Board","CPU","Memory","GPU","Display"]
-# partial fetch
+# partial fetch initial content
 PARTIAL_FETCH_CONTENT = ["Board","CPU","Memory"]
 
 # arguments
-EXACT_MATCH = "--exact-match" in argv or "-m" in argv
-PARTIAL_FETCH = "--partial" in argv or "-p" in argv
-WRITE_CONFIG = not ("--no-write" in argv or "-r" in argv)
 VERBOSE = "--verbose" in argv or "-v" in argv
 
 # colors
@@ -198,23 +194,27 @@ class HardwareConfig:
         except Exception as _:
             self.components = {}
 
-    def match(self, component_list:dict, exact_match=False) -> int:
+    def match(self, component_list:dict, ignore_conflict=False) -> int:
         """
-        returns the number of matching fields (so that a general config may be applied if all other fail and exact match is set to false)
+        returns the number of matching fields between the fetched components and the ones defines by the config
         """
         if component_list is None or len(component_list) == 0:
             return 0
-        matching = 0
-        if exact_match and self.components == component_list:
+        if self.components == component_list:
             return len(component_list)
 
-        # if exactMatch is not specified, it will attempt to find the closest config it can find
+        matching = 0
+        
         for k,v in component_list.items():
-            if k in self.components and str(v).lower() == str(self.components[k]).lower():
-                matching += 1
+            if k in self.components:
+                if str(v).lower() == str(self.components[k]).lower():
+                    matching += 1
+                elif not ignore_conflict:
+                    return 0
 
         return matching
 
+    @staticmethod
     def UnknownConfig():
         return HardwareConfig(UNKNOWN_CONFIG_NAME, load_scripts=False)
 
@@ -275,7 +275,6 @@ def fetch_components(components: list) -> dict:
     except subprocess.CalledProcessError as er:
         print("an error occured when fetching the data !")
         print("no config found")
-        set_current_config(UNKNOWN_CONFIG)
         raise er
 
     fetched = output.strip().splitlines()
@@ -316,44 +315,25 @@ def load_configs() -> list:
                 user_configs.append(hw_config)
     return user_configs
 
+def sort_config(config:HardwareConfig, match_result:int) -> float:
+    """
+    Returns a score to rank the configs from the least probable (0) to
+    the most probable (1).
+    """
+    max_comp_amount = len(FULL_FETCH_CONTENT)
+    config_comps = len(config.components)
+    absolute_score = match_result/max(max_comp_amount,1)/2
+    relative_score = match_result/max(config_comps,1)/2
+    return absolute_score+relative_score
 
-def full_detect(exact_match=False, verbose=False) -> HardwareConfig:
-    start_time = time()
-    fetch_content = fetch_components(FULL_FETCH_CONTENT)
-    if verbose:
-        fetch_time = round((time()-start_time)*1000)
-        print_verbose(f"fetching took {fetch_time}ms")
-    data_size = len(fetch_content)
+def get_sorted_config_list(config_list:list, fetch_content:dict) -> list:
+    return sorted(
+        [(k,sort_config(k,k.match(fetch_content))) for k in config_list],
+        key = lambda k: k[1],
+        reverse = True
+    )
 
-    found_configs = load_configs()
-    print_verbose(f"found {len(found_configs)} hardware configs",verbose)
-    match_map = {}
-
-    for conf in found_configs:
-        match_map[conf] = conf.match(fetch_content,exact_match)
-
-    sorted_matches = sorted(match_map.items(), key=lambda k:k[1], reverse=True)
-
-    if not (len(sorted_matches) == 0 or (exact_match and sorted_matches[0][1] != data_size)):
-        best_match = sorted_matches[0]
-        found_config = best_match[0]
-        if exact_match:
-            print_verbose("exact match mode specified",verbose)
-        if best_match[1] == data_size:
-            print_verbose(f"config [{found_config.name}] exactly matched !",verbose)
-            return found_config
-        if not exact_match:
-            print_verbose(f"found config [{found_config.name}] with {best_match[1]}/{data_size} matches",verbose)
-            return found_config
-
-    if verbose:
-        total_time = round((time()-start_time)*1000)
-        print_verbose(f"config matching done in {total_time-fetch_time}ms")
-        print_verbose(f"complete config detection done in {total_time}ms")
-
-    return HardwareConfig.UnknownConfig()
-
-def partial_detect(verbose=False) -> HardwareConfig:
+def detect(verbose=False, exact_match=False) -> HardwareConfig:
     found_configs = load_configs()
     print_verbose(f"found {len(found_configs)} hardware configs")
 
@@ -362,39 +342,38 @@ def partial_detect(verbose=False) -> HardwareConfig:
     if verbose:
         print_verbose(f"initial fetch done in {round((time()-start_time)*1000)}ms")
 
-    unused_components = [""]
-
-    for c in FULL_FETCH_CONTENT:
-        if not c in PARTIAL_FETCH_CONTENT:
-            unused_components.append(c)
+    unused_components = [c for c in FULL_FETCH_CONTENT if c not in PARTIAL_FETCH_CONTENT]
 
     refetch_amount = 0
-    conf = HardwareConfig.UnknownConfig()
 
     used_config = HardwareConfig.UnknownConfig()
-    
+
     for i in unused_components:
         if len(i) > 0:
             fetch_content.update(fetch_components([i]))
             refetch_amount += 1
 
-        matchmap = {}
-        for conf in found_configs:
-            matchmap[conf] = conf.match(fetch_content,False)
-        max_matches = max(matchmap.values()) if len(matchmap) > 0 else 0
-
-        matching = []
-        for k,v in matchmap.items():
-            if v == max_matches :
-                matching.append(k)
-
-        if len(matching) <= 1:
-            if len(matching) == 0:
-                print_verbose("No config found.")
-            else:
-                # partial match case
-                used_config = matching[0]
-                print_verbose(f"found config [{used_config.name}] with {matchmap[used_config]} matches")
+        #matchmap = {}
+        #for conf in found_configs:
+        #    matchmap[conf] = sort_config(conf,conf.match(fetch_content))
+        #max_matches = max(matchmap.values()) if len(matchmap) > 0 else 0
+        
+        matching = get_sorted_config_list(found_configs,fetch_content)
+        #for k,v in matchmap.items():
+        #    if v == max_matches :
+        #        matching.append(k)
+        if len(matching) == 0:
+            print_verbose("No config found.")
+            return used_config
+        best_match = matching[0][0]
+        best_match_score = matching[0][1]
+        if best_match_score == 1:
+            used_config = best_match
+            print_verbose(f"config [{used_config.name}] exactly matched")
+            break
+        if not exact_match and best_match_score > 0:
+            used_config = best_match
+            print_verbose(f"found config [{used_config.name}] with {used_config.match(fetch_content)} matches")
             break
 
     if VERBOSE:
@@ -511,9 +490,9 @@ def test(benchmark_fetch = True, list_configs = True, list_scripts = True):
         print(f"{C_BLUE}\nListing hardware configs...{C_RESET}")
 
         for c in load_configs():
-            configs[c] = c.match(hardware,exact_match=False)
+            configs[c] = c.match(hardware)
 
-        for conf, matches in sorted(configs.items(), key=lambda k:k[1], reverse=True):
+        for conf, matches in sorted(configs.items(), key=lambda k:sort_config(k[0],k[1]), reverse=True):
             c1 = C_RESET
             c2 = C_RESET
             if conf.name == current.name:
@@ -523,16 +502,12 @@ def test(benchmark_fetch = True, list_configs = True, list_scripts = True):
                 c1 = C_GRAY
                 c2 = C_GRAY
             print(f"    {c1}- {c2}{conf.name}{c1}: {conf.get_component_file()}")
-            print(f"      {c2}matches: {matches}/{len(hardware)}{C_RESET}")
+            print(f"      {c2}matches: {matches}/{len(conf.components)} : {sort_config(conf,matches)}{C_RESET}")
         print(f"{C_GREEN}==> {C_CYAN}{len(configs)} config{'s' if len(configs) > 1 else ''}{C_GREEN} found{C_RESET}")
 
         print(f"{C_BLUE}\nStarting detection benchmark...{C_RESET}")
         start_time = time()
-        full_detect()
-        final_time = round((time()-start_time)*1000)
-        print(f"{C_GREEN}==> normal detection took {C_CYAN}{final_time}ms{C_RESET}\n")
-        start_time = time()
-        partial_detect()
+        detect()
         final_time = round((time()-start_time)*1000)
         print(f"{C_GREEN}==> partial detection took {C_CYAN}{final_time}ms{C_RESET}")
 
@@ -620,17 +595,16 @@ def main(args:list) -> int:
                 print("ERROR : fastfetch not found! please ensure fastfetch is present and available.\nAborting detection!")
                 os.sys.exit()
             print("Detecting hardware configuration...")
-            found_config = None
-            if PARTIAL_FETCH:
-                print_verbose("using partial detection")
-                found_config = partial_detect()
-            else:
-                found_config = full_detect()
+            try:
+                found_config = detect(exact_match="--exact-match" in args or "-m" in args)
+            except Exception:
+                found_config = None
             if found_config is None:
-                print("No config found! Using unknown_config instead.")
                 found_config = HardwareConfig.UnknownConfig()
+                print(f"No config found! Using {found_config.name} instead.")
             print(f"using config [{found_config.name}]")
-            set_current_config(found_config)
+            if not ("--no-write" in args or "-r" in args):
+                set_current_config(found_config)
 
         case RunMode.TEST:
             if len(args) == 1:

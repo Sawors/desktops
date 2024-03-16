@@ -4,7 +4,7 @@ After=display-manager.service
 
 [Service]
 Type=oneshot
-ExecStart=/etc/desktops/desktops detect --partial --verbose
+ExecStart=/etc/desktops/desktops detect --verbose
 # I want to slowly remove the root script system
 # ExecStart=/etc/desktops/desktops apply --root
 
