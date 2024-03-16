@@ -45,7 +45,7 @@ When the hardware detection is first run, it will attempt to read each `componen
 
 ## Startup scripts
 ### Root script
-> Using root scripts is strongly discouraged ! Please use user script with correctly set permissions instead.
+> Using root scripts is **strongly discouraged** ! Please use user script with correctly set permissions instead.
 
 When the initial detection is done and the config is found, the `root-launch.sh` script is immediately run as root. Please ensure that the permissions of this file are properly set to avoid the execution of unknown code with root privileges.
 
