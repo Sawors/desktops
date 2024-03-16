@@ -357,8 +357,7 @@ def partial_detect(verbose=False) -> HardwareConfig:
     found_configs = load_configs()
     print_verbose(f"found {len(found_configs)} hardware configs")
 
-    if verbose:
-        start_time = time()
+    start_time = time()
     fetch_content = fetch_components(PARTIAL_FETCH_CONTENT)
     if verbose:
         print_verbose(f"initial fetch done in {round((time()-start_time)*1000)}ms")
@@ -372,6 +371,8 @@ def partial_detect(verbose=False) -> HardwareConfig:
     refetch_amount = 0
     conf = HardwareConfig.UnknownConfig()
 
+    used_config = HardwareConfig.UnknownConfig()
+    
     for i in unused_components:
         if len(i) > 0:
             fetch_content.update(fetch_components([i]))
@@ -392,8 +393,8 @@ def partial_detect(verbose=False) -> HardwareConfig:
                 print_verbose("No config found.")
             else:
                 # partial match case
-                best_match = matching[0]
-                print_verbose(f"found config [{best_match.name}] with {matchmap[best_match]} matches")
+                used_config = matching[0]
+                print_verbose(f"found config [{used_config.name}] with {matchmap[used_config]} matches")
             break
 
     if VERBOSE:
@@ -401,7 +402,7 @@ def partial_detect(verbose=False) -> HardwareConfig:
         print_verbose(f"config matching done with {refetch_amount} additionnal fetch{'es' if refetch_amount > 1 else ''}")
         print_verbose(f"complete config detection done in {total_time}ms")
 
-    return HardwareConfig.UnknownConfig()
+    return used_config
 
 
 def apply(current_config:HardwareConfig, passed_arguments="", is_root=False):
