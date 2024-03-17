@@ -17,6 +17,7 @@ class RunMode:
     APPLY = "apply"
     TEST = "test"
     CREATE = "create"
+    CONFIG = "config"
 
     help_messages = {
         DETECT: """Desktops: Detection mode
@@ -39,8 +40,8 @@ This mode applies the launch scripts of the found hardware configuration. There 
     -t=<type>, --type=<type>  pass <type> to the launch script as its first argument
     -v, --verbose             print additional runtime information
     """,
-        TEST: """Desktops: Test mode
-Benchmarking mode. Usefull if you need to know how much time fetching takes, or where are located hardware configs and launch scripts.
+        TEST: """Desktops: Benchmarking mode
+Usefull if you need to know how much time fetching takes, or where are located hardware configs and launch scripts.
 
     usage: desktops test [OPTIONS]
 
@@ -52,7 +53,7 @@ Benchmarking mode. Usefull if you need to know how much time fetching takes, or 
     note: By default benchmark, configs and scripts are enabled. 
     Specifying one of them will disable the other unless explicitly enabled.
     """,
-        CREATE: """Desktops: creation mode
+        CREATE: """Desktops: Creation mode
 This mode allows you to automatically create a hardware configuration from your current hardware.
 
     usage: desktops create <configname> [OPTIONS]
@@ -65,6 +66,18 @@ This mode allows you to automatically create a hardware configuration from your 
 
     note: If you are using -n= you can ommit specifying the config name as second argument
     """,
+        CONFIG: """Desktops: Config management mode
+    This mode is used to list currently discovered configs or get/set the currently used one.
+    
+    usage: desktops config <subcommand>
+
+    subcommand list:
+    current           get the currently used config
+    set <config>      set the currently used config
+    list              list all the currently found configs
+    match [config]    match all the configs, or a specific one with the currently detected hardware
+    """,
+    # default general help message
     "": """
     Please specify an action.
     Usage :
@@ -77,7 +90,8 @@ This mode allows you to automatically create a hardware configuration from your 
         test
         
     to get help on an action, run :
-        desktops <ACTION> --help"""
+        desktops <ACTION> --help""",
+        
     }
 
 
@@ -107,6 +121,7 @@ VERBOSE = "--verbose" in argv or "-v" in argv
 C_ORANGE = "\033[93m"
 C_CYAN = "\033[36m"
 C_GREEN = "\033[92m"
+C_RED = "\033[31m"
 C_BLUE = "\033[94m"
 C_MAGENTA = "\033[95m"
 C_GRAY = "\033[90m"
@@ -199,6 +214,13 @@ class HardwareConfig:
             self.components = self._load_components()
         except Exception as _:
             self.components = {}
+
+    def match_map(self, component_list:dict) -> dict:
+        matching = {}
+        for k,v in self.components.items():
+            matching[k] = k in component_list and str(component_list[k]).lower() == str(v).lower()
+        return matching
+
 
     def match(self, component_list:dict, ignore_conflict=False) -> int:
         """
@@ -577,6 +599,7 @@ def create(config_name:str):
         except Exception:
             print("Config cleanup failed")
 
+
 ##################################################
 #                                                #
 #  End of definitions, beginning of script flow  #
@@ -648,18 +671,64 @@ def main(args:list) -> int:
 
         case RunMode.CREATE:
             name = ""
-            for a in argv:
+            for a in args:
                 if a.startswith("--name=") or a.startswith("-n="):
                     name = a[a.index("=")+1:len(a)]
                     break
-            if len(name) < 1 and len(argv) >= 3 and len(argv[2]) > 0 and not argv[2].startswith("-"):
-                name = argv[2]
+            if len(name) < 1 and len(args) >= 2 and len(args[1]) > 0 and not args[1].startswith("-"):
+                name = args[1]
             if len(name) > 0:
                 print(f"Creating config [{name}]...")
                 create(name)
                 print("Config creation done!")
             else:
                 print("Please input a name for the config, either using --name=<name> or by putting it as the argument after \"create\"")
+
+        case RunMode.CONFIG:
+            subcommand = args[1] if len(args) >= 2 else ""
+            config_name = args[2] if len(args) >= 3 else ""
+            match subcommand:
+                case "set":
+                    if len(config_name) < 1:
+                        print("Please provide a config to set")
+                        return 1
+                    config = HardwareConfig(config_name)
+                    if not config.exists():
+                        print("The config provided does not exist")
+                        return 1
+                    set_current_config(config)
+                    print(f"Config set to {config.name}")
+                case "get" | "current":
+                    config = get_current_config()
+                    print(config.name)
+                case "list":
+                    print("Discovered configs:")
+                    for config in load_configs():
+                        print(f"  {C_CYAN}{config.name}")
+                case "match":
+                    hardware = fetch_components(FULL_FETCH_CONTENT)
+                    def get_match_print(config:HardwareConfig) -> str:
+                        msg = f"  {C_MAGENTA}{config.name}{C_RESET}\n"
+                        match_map = config.match_map(hardware)
+                        max_pad = len(max(match_map.keys() if len(match_map) > 0 else [""]))
+                        for comp, state in match_map.items():
+                            comp_name = config.components[comp]
+                            padding = " "*(max_pad-len(comp))
+                            hardware_str = (
+                                f"{C_GREEN}{state} ({comp_name})"
+                                #{C_GREEN if state else C_RED}{state} ({comp_name})
+                            ) if state else (
+                                f"{C_RED}{state} ({comp_name}) -> {C_ORANGE}{hardware.get(comp,'-')}"
+                            )
+                            msg += f"    {comp}:{padding} {hardware_str}{C_RESET}\n"
+                        return msg
+                    config = HardwareConfig(config_name)
+                    match_list = [config] if config.exists() else load_configs()
+                    for c in match_list:
+                        print(get_match_print(c))
+                case _:
+                    print(RunMode.help_messages[RunMode.CONFIG])
+
         case _:
             print(RunMode.help_messages[""])
             return 1
