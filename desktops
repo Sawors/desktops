@@ -91,7 +91,7 @@ This mode allows you to automatically create a hardware configuration from your 
         
     to get help on an action, run :
         desktops <ACTION> --help""",
-        
+
     }
 
 
@@ -700,7 +700,17 @@ def main(args:list) -> int:
                     print(f"Config set to {config.name}")
                 case "get" | "current":
                     config = get_current_config()
-                    print(config.name)
+                    print(config.name, end="")
+                case "prop" | "property":
+                    config = get_current_config()
+                    if len(config_name) < 1:
+                        print("Please specify a property to get")
+                        return 0
+                    match config_name:
+                        case "root":
+                            print(str(config.get_general_config_dir()),end="")
+                        case "userconfig":
+                            print(config.get_user_config_dir(),end="")
                 case "list":
                     print("Discovered configs:")
                     for config in load_configs():
