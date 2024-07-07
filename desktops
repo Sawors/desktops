@@ -132,6 +132,8 @@ class HardwareConfig:
     CONFIG_DIR_NAME="desktops"
     GENERAL_CONFIG_DIR=f"/etc/{ROOT_DIR_NAME}/{HARDWARE_CONFIG_DIR}"
     USER_CONFIG_DIR=path.expanduser(f"~/.config/{CONFIG_DIR_NAME}/{HARDWARE_CONFIG_DIR_NAME}")
+    COMPONENTS_SCRIPT_DIR_NAME = "scripts"
+    COMPONENTS_SCRIPT_IGNORED_CHAR = "_"
     # FILE IDENTIFIERS
     class FileName:
         COMPONENTS = "components.yml"
@@ -154,21 +156,23 @@ class HardwareConfig:
                     return f"{filepath}/{file}"
         return None
 
-    def _load_user_scripts(self) -> set:
-        conf=set()
-        gen_script = self._get_file(self.get_general_config_dir(), HardwareConfig.FileName.SCRIPT_USER)
-        usr_script = self._get_file(self.get_user_config_dir(), HardwareConfig.FileName.SCRIPT_USER)
-        if not gen_script is None:
-            conf.add(gen_script)
-        if not usr_script is None:
-            conf.add(usr_script)
+    def _load_user_scripts(self) -> list:
+        conf=list()
+        # gen_script = self._get_file(self.get_general_config_dir(), HardwareConfig.FileName.SCRIPT_USER)
+        comp_dir = f"{self.get_user_config_dir()}{os.sep}{HardwareConfig.COMPONENTS_SCRIPT_DIR_NAME}"
+        if os.path.isdir(comp_dir):
+            for f in os.listdir(comp_dir):
+                fullpath = f"{comp_dir}{os.sep}{f}"
+                if not f.startswith(COMPONENTS_SCRIPT_IGNORED_CHAR) and os.path.isfile(fullpath):
+                    conf.append(fullpath)
+        conf = sorted(conf)
         return conf
 
-    def _load_root_scripts(self) -> set:
-        conf=set()
+    def _load_root_scripts(self) -> list:
+        conf=list()
         gen_script = self._get_file(self.get_general_config_dir(), HardwareConfig.FileName.SCRIPT_ROOT)
         if not gen_script is None:
-            conf.add(gen_script)
+            conf.append(gen_script)
         return conf
 
     @staticmethod
@@ -205,8 +209,8 @@ class HardwareConfig:
 
     def __init__(self, name:str, load_scripts=True):
         self.name = name
-        self.user_scripts = set()
-        self.root_scripts = set()
+        self.user_scripts = list()
+        self.root_scripts = list()
         self.are_scripts_loaded=False
         if load_scripts:
             self.load_scripts()
@@ -360,6 +364,11 @@ def get_sorted_config_list(config_list:list, fetch_content:dict) -> list:
         reverse = True
     )
 
+########################################
+##                                    ##
+##               DETECT               ##
+##                                    ##
+########################################
 def detect(verbose=False, exact_match=False) -> HardwareConfig:
     found_configs = load_configs()
     print_verbose(f"found {len(found_configs)} hardware configs")
@@ -410,7 +419,11 @@ def detect(verbose=False, exact_match=False) -> HardwareConfig:
 
     return used_config
 
-
+########################################
+##                                    ##
+##                APPLY               ##
+##                                    ##
+########################################
 def apply(current_config:HardwareConfig, passed_arguments="", is_root=False):
     # the config will be applied as the current user. For any operation requiring root privileges please edit /etc/sddm/Xsetup.
 
@@ -451,7 +464,9 @@ def apply(current_config:HardwareConfig, passed_arguments="", is_root=False):
                 print(f"Failed to run {s} !")
                 failed_scripts += 1
     else:
-        for s in current_config.user_scripts:
+        user_scp = current_config.user_scripts
+        
+        for s in user_scp:
             try:
                 if not s is None and len(s) > 0:
                     system(f"{s} {passed_arguments}")
@@ -503,8 +518,12 @@ def benchmark():
     for category, comp in merged_list.items():
         print(f"    - {category} : {comp}")
 
+########################################
+##                                    ##
+##                 TEST               ##
+##                                    ##
+########################################
 def test(benchmark_fetch = True, list_configs = True, list_scripts = True):
-
     hardware = fetch_components(FULL_FETCH_CONTENT)
     current = get_current_config()
     configs = {}
@@ -559,12 +578,16 @@ def test(benchmark_fetch = True, list_configs = True, list_scripts = True):
             print(f"    {c1}[{c2}{c.name}{c1}]:")
             print(f"      {c2 if is_root else c1}root{c1}:")
             for index, sc in enumerate(c.root_scripts):
-                print(f"        {index}. {sc}")
+                print(f"        {index+1}. {sc}")
             print(f"      {c2 if not is_root else c1}user{c1}:")
             for index, sc in enumerate(c.user_scripts):
-                print(f"        {index}. {sc}")
+                print(f"        {index+1}. {sc}")
 
-
+########################################
+##                                    ##
+##               CREATE               ##
+##                                    ##
+########################################
 def create(config_name:str):
     datamap = fetch_components(FULL_FETCH_CONTENT)
     config_path = f"{HARDWARE_CONFIG_DIR}/{config_name}"
