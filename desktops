@@ -101,6 +101,7 @@ ROOT_DIR_NAME = "desktops"
 ROOT_DIR = f"/etc/{ROOT_DIR_NAME}"
 HARDWARE_CONFIG_DIR_NAME = "hardware"
 HARDWARE_CONFIG_DIR = f"{ROOT_DIR}/{HARDWARE_CONFIG_DIR_NAME}"
+SHARED_CONFIG_DIR_NAME = ".shared"
 CURRENT_CONFIG_FILE = f"{ROOT_DIR}/desktops_current"
 UNKNOWN_CONFIG_NAME = "unknown_config"
 # ideally sorted in order, from quickest to slowest
@@ -163,7 +164,7 @@ class HardwareConfig:
         if os.path.isdir(comp_dir):
             for f in os.listdir(comp_dir):
                 fullpath = f"{comp_dir}{os.sep}{f}"
-                if not f.startswith(COMPONENTS_SCRIPT_IGNORED_CHAR) and os.path.isfile(fullpath):
+                if not f.startswith(HardwareConfig.COMPONENTS_SCRIPT_IGNORED_CHAR) and os.path.isfile(fullpath):
                     conf.append(fullpath)
         conf = sorted(conf)
         return conf
@@ -250,6 +251,9 @@ class HardwareConfig:
     def UnknownConfig():
         return HardwareConfig(UNKNOWN_CONFIG_NAME, load_scripts=False)
 
+def get_shared_config_dir() -> str:
+    return path.expanduser(f"~/.config/{HardwareConfig.CONFIG_DIR_NAME}/{SHARED_CONFIG_DIR_NAME}")
+
 def save_config(config:HardwareConfig):
     # not in the HardwareConfig class to prevent
     # abuse in saving configs. This operation
@@ -265,13 +269,16 @@ def print_verbose(text: str, verbose=True):
     if verbose:
         print(text)
 
-def get_current_config() -> HardwareConfig:
+def get_current_config_name() -> str:
     if not path.isfile(CURRENT_CONFIG_FILE):
         raise FileNotFoundError("Current config is not set yet.")
-    conf_name = "gnbergnf"
+    conf_name = None
     with open(CURRENT_CONFIG_FILE, "r", encoding=ENCODING) as file_input:
         file_input.seek(0)
         conf_name = file_input.readline().strip()
+    return conf_name
+def get_current_config() -> HardwareConfig:
+    conf_name = get_current_config_name()
     conf = HardwareConfig(conf_name)
     if conf.exists():
         return conf
@@ -292,10 +299,16 @@ def fetch_components(components: list) -> dict:
     component_str = ":".join(components)
     args = [
                 "fastfetch",
+                "-l none",
                 "--pipe",
                 "-s",
                 component_str,
-                "--multithreading"
+                "--multithreading",
+                "--CPU-format '{1}'",
+                "--GPU-format '{1} {2}'",
+                "--Memory-format '{2}'",
+                "--Display-format '{1}x{2}'",
+                "--Board-format '{1}'",
             ]
     try:
         output = subprocess.check_output(
@@ -315,14 +328,14 @@ def fetch_components(components: list) -> dict:
         if entry.startswith("Display"):
             # do not count monitors with a height smaller than 1080 pixels (to avoid detecting fake monitors)
             # WARNING: THIS COULD LEAD TO UNWANTED BEHAVIOURS !
-            height = int(entry[entry.rfind("x")+1:entry.rfind("@")-1])
+            duo = entry.split(":")[1].split("x")
+            height = int(duo[0])
             if height < 1080:
                 continue
             monitor_amount+=1
         else:
             duo = entry.split(":")
-            data = duo[1].strip()
-
+            data = duo[1].strip() if len(duo) > 1 else ""
             datamap[str(duo[0]).lower()] = data
     if "Display" in components:
         datamap["monitors"] = str(monitor_amount)
@@ -465,6 +478,9 @@ def apply(current_config:HardwareConfig, passed_arguments="", is_root=False):
                 failed_scripts += 1
     else:
         user_scp = current_config.user_scripts
+
+        shutil.rmtree(get_shared_config_dir())
+        os.mkdir(get_shared_config_dir())
         
         for s in user_scp:
             try:
@@ -631,12 +647,18 @@ def create(config_name:str):
 
 def main(args:list) -> int:
 
-    if len(args) < 1 or args[0].startswith("-") or (len(args) >= 2 and (args[1] == "--help" or args[1] == "-h")):
-        help_message = RunMode.help_messages.get(args[0] if len(args) > 1 else "","")
-        print(help_message)
-        return 1
+    mode = None
 
-    mode = args[0]
+    if not (len(args) < 1 or args[0].startswith("-") or (len(args) >= 2 and (args[1] == "--help" or args[1] == "-h"))):
+        mode = args[0]
+
+
+    if not path.isfile(CURRENT_CONFIG_FILE):
+        try:
+            open(CURRENT_CONFIG_FILE, "w").close()
+        except:
+            print(f"Could not open config save file, please change permissions to file {CURRENT_CONFIG_FILE}.")
+            return 1
 
     match(mode):
         case RunMode.DETECT:
@@ -711,6 +733,9 @@ def main(args:list) -> int:
             subcommand = args[1] if len(args) >= 2 else ""
             config_name = args[2] if len(args) >= 3 else ""
             match subcommand:
+                case "shared":
+                    print(get_shared_config_dir())
+                    return 0
                 case "set":
                     if len(config_name) < 1:
                         print("Please provide a config to set")
@@ -734,6 +759,8 @@ def main(args:list) -> int:
                             print(str(config.get_general_config_dir()),end="")
                         case "userconfig":
                             print(config.get_user_config_dir(),end="")
+                        case "components":
+                            print(f"{config.get_user_config_dir()}{os.sep}{HardwareConfig.COMPONENTS_SCRIPT_DIR_NAME}")
                 case "list":
                     print("Discovered configs:")
                     for config in load_configs():
@@ -763,8 +790,12 @@ def main(args:list) -> int:
                     print(RunMode.help_messages[RunMode.CONFIG])
 
         case _:
-            print(RunMode.help_messages[""])
-            return 1
+            old = get_current_config_name()
+            dt = detect()
+            print(f"\n    Current config is [{old}]")
+            print(f"    Detected config is [{dt.name}]")
+            print(RunMode.help_messages.get(args[0] if len(args) > 1 else "",""))
+            return 0
 
 
 if __name__ == "__main__":
