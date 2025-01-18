@@ -106,14 +106,14 @@ CURRENT_CONFIG_FILE = f"{ROOT_DIR}/desktops_current"
 UNKNOWN_CONFIG_NAME = "unknown_config"
 # ideally sorted in order, from quickest to slowest
 FULL_FETCH_CONTENT = [
-                        "Board",
-                        "CPU",
-                        "Memory",
-                        "GPU",
-                        "Display"
+                        "board",
+                        "cpu",
+                        "memory",
+                        "gpu",
+                        "display"
                     ]
 # partial fetch initial content
-PARTIAL_FETCH_CONTENT = ["Board","CPU","Memory"]
+PARTIAL_FETCH_CONTENT = ["board","cpu","memory"]
 
 # arguments
 VERBOSE = "--verbose" in argv or "-v" in argv
@@ -227,7 +227,7 @@ class HardwareConfig:
         return matching
 
 
-    def match(self, component_list:dict, ignore_conflict=False) -> int:
+    def match(self, component_list:dict, ignore_conflict=True) -> int:
         """
         returns the number of matching fields between the fetched components and the ones defines by the config
         """
@@ -240,11 +240,10 @@ class HardwareConfig:
 
         for k,v in component_list.items():
             if k in self.components:
-                if str(v).lower() == str(self.components[k]).lower():
+                if str(v).lower().strip() == str(self.components[k]).lower().strip():
                     matching += 1
                 elif not ignore_conflict:
                     return 0
-
         return matching
 
     @staticmethod
@@ -394,14 +393,13 @@ def detect(verbose=False, exact_match=False) -> HardwareConfig:
     unused_components = [c for c in FULL_FETCH_CONTENT if c not in PARTIAL_FETCH_CONTENT]
 
     refetch_amount = 0
-
+    
     used_config = HardwareConfig.UnknownConfig()
 
     for i in unused_components:
         if len(i) > 0:
             fetch_content.update(fetch_components([i]))
             refetch_amount += 1
-
         #matchmap = {}
         #for conf in found_configs:
         #    matchmap[conf] = sort_config(conf,conf.match(fetch_content))
