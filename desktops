@@ -99,8 +99,9 @@ This mode allows you to automatically create a hardware configuration from your 
 ENCODING=utf_8.getregentry().name
 ROOT_DIR_NAME = "desktops"
 ROOT_DIR = f"/etc/{ROOT_DIR_NAME}"
+SYSTEM_ROOT_DIR = f"/usr/share/{ROOT_DIR_NAME}"
 HARDWARE_CONFIG_DIR_NAME = "hardware"
-HARDWARE_CONFIG_DIR = f"{ROOT_DIR}/{HARDWARE_CONFIG_DIR_NAME}"
+HARDWARE_CONFIG_DIR = f"{SYSTEM_ROOT_DIR}/{HARDWARE_CONFIG_DIR_NAME}"
 SHARED_CONFIG_DIR_NAME = ".shared"
 CURRENT_CONFIG_FILE = f"{ROOT_DIR}/desktops_current"
 UNKNOWN_CONFIG_NAME = "unknown_config"
