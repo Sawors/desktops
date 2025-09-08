@@ -229,10 +229,16 @@ class HardwareConfig:
 
         for k,v in component_list.items():
             if k in self.components:
-                if str(v).lower().strip() == str(self.components[k]).lower().strip():
-                    matching += 1
-                elif not ignore_conflict:
-                    return 0
+                try:
+                    if str(v).lower().strip() == str(self.components[k]).lower().strip():
+                        matching += 1
+                    elif k == "memory" and abs(int(self.components[k])/int(v)-1) <= 0.15:
+                    # allows a 15% memory margin, to account for irregularities in reports
+                        matching += 1
+                except ValueError:
+                    pass 
+            elif not ignore_conflict:
+                return 0
         return matching
 
     @staticmethod
