@@ -1,0 +1,130 @@
+{
+  "display": {
+    "stat": false,
+    "pipe": true,
+    "showErrors": false,
+    "disableLinewrap": true,
+    "hideCursor": false,
+    "separator": ": ",
+    "color": {
+      "keys": "",
+      "title": "",
+      "output": "",
+      "separator": ""
+    },
+    "brightColor": true,
+    "duration": {
+      "abbreviation": false,
+      "spaceBeforeUnit": "default"
+    },
+    "size": {
+      "maxPrefix": "YB",
+      "binaryPrefix": "iec",
+      "ndigits": 2,
+      "spaceBeforeUnit": "default"
+    },
+    "temp": {
+      "unit": "D",
+      "ndigits": 1,
+      "color": {
+        "green": "32",
+        "yellow": "93",
+        "red": "91"
+      },
+      "spaceBeforeUnit": "default"
+    },
+    "percent": {
+      "type": [
+        "num",
+        "num-color"
+      ],
+      "ndigits": 0,
+      "color": {
+        "green": "32",
+        "yellow": "93",
+        "red": "91"
+      },
+      "spaceBeforeUnit": "default",
+      "width": 0
+    },
+    "bar": {
+      "char": {
+        "elapsed": "■",
+        "total": "-"
+      },
+      "border": {
+        "left": "[ ",
+        "right": " ]",
+        "leftElapsed": "",
+        "rightElapsed": ""
+      },
+      "color": {
+        "elapsed": "auto",
+        "total": "97",
+        "border": "97"
+      },
+      "width": 10
+    },
+    "fraction": {
+      "ndigits": 2
+    },
+    "noBuffer": false,
+    "key": {
+      "width": 0,
+      "type": "string",
+      "paddingLeft": 0
+    },
+    "freq": {
+      "ndigits": 2,
+      "spaceBeforeUnit": "default"
+    },
+    "constants": []
+  },
+  "general": {
+    "thread": true,
+    "processingTimeout": 5000,
+    "detectVersion": true,
+    "playerName": "",
+    "dsForceDrm": false
+  },
+  "modules": [
+        {
+      "type": "display",
+      "keyIcon": "󰍹",
+      "compactType": "none",
+      "preciseRefreshRate": false,
+      "format": "{width}x{height}"
+    },
+    {
+      "type": "cpu",
+      "keyIcon": "",
+      "temp": false,
+      "showPeCoreCount": false,
+      "format": "{name}"
+    },
+    {
+      "type": "gpu",
+      "keyIcon": "󰾲",
+      "driverSpecific": false,
+      "detectionMethod": "pci",
+      "temp": false,
+      "hideType": "none",
+      "percent": {
+        "green": 50,
+        "yellow": 80,
+        "type": 0
+      },
+      "format": "{vendor} {name}"
+    },
+    {
+      "type": "memory",
+      "keyIcon": "",
+      "percent": {
+        "green": 50,
+        "yellow": 80,
+        "type": 0
+      },
+      "format": "{total}"
+    },
+  ]
+}
